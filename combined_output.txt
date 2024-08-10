@@ -1,0 +1,634 @@
+
+--- Start of background.html ---
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script type="module" src="background.js"></script>
+</head>
+</html>
+--- End of background.html ---
+
+
+--- Start of background.js ---
+
+import { getBookmarks, sendToServer } from './bookmarkUtils.js';
+
+let organizedBookmarks = null;
+
+browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
+  if (request.action === "previewOrganization") {
+    previewOrganization().then((preview) => {
+      sendResponse({success: true, preview: preview});
+    }).catch((error) => {
+      console.error("Error previewing organization:", error);
+      sendResponse({success: false, error: error.message});
+    });
+    return true;
+  } else if (request.action === "applyOrganization") {
+    applyOrganization().then(() => {
+      sendResponse({success: true});
+    }).catch((error) => {
+      console.error("Error applying organization:", error);
+      sendResponse({success: false, error: error.message});
+    });
+    return true;
+  }
+});
+
+async function previewOrganization() {
+  try {
+    const bookmarks = await getBookmarks();
+    console.log("Retrieved bookmarks:", bookmarks);
+
+    if (!bookmarks || bookmarks.length === 0) {
+      throw new Error("No bookmarks found");
+    }
+
+    const response = await sendToServer(bookmarks);
+    console.log("Received response from server:", response);
+
+    if (!response || !response.success || !response.preview || typeof response.preview !== 'object') {
+      throw new Error("Invalid response from server");
+    }
+
+    organizedBookmarks = response.preview;
+
+    // Format the bookmarks for visualization
+    const formattedBookmarks = {};
+    for (const [topic, bookmarks] of Object.entries(organizedBookmarks)) {
+      if (topic === 'success') continue;
+      console.log(`Processing topic: ${topic}, bookmarks:`, bookmarks);
+      if (!Array.isArray(bookmarks)) {
+        console.error(`Bookmarks for topic ${topic} is not an array:`, bookmarks);
+        formattedBookmarks[topic] = [];
+        continue;
+      }
+      formattedBookmarks[topic] = bookmarks.map(b => ({
+        url: b.url || 'unknown',
+        title: b.title || 'Untitled',
+        embedding: b.embedding || []
+      }));
+    }
+
+    console.log("Formatted bookmarks:", formattedBookmarks);
+    return formattedBookmarks;
+  } catch (error) {
+    console.error("Error in previewOrganization:", error);
+    console.error("Error stack:", error.stack);
+    throw error;
+  }
+}
+
+async function applyOrganization() {
+  if (!organizedBookmarks) {
+    throw new Error("No organization preview available. Please organize bookmarks first.");
+  }
+
+  try {
+    await updateBookmarkStructure(organizedBookmarks);
+    organizedBookmarks = null; // Clear the preview after applying
+    return { success: true };
+  } catch (error) {
+    console.error("Error in applyOrganization:", error);
+    throw error;
+  }
+}
+
+async function updateBookmarkStructure(organizedBookmarks) {
+  const otherBookmarksId = await getOtherBookmarksId();
+
+  for (const [topic, bookmarks] of Object.entries(organizedBookmarks)) {
+    let topicFolder = await findOrCreateFolder(otherBookmarksId, topic);
+    
+    for (const bookmark of bookmarks) {
+      await browser.bookmarks.create({
+        parentId: topicFolder.id,
+        title: bookmark.title,
+        url: bookmark.url
+      });
+    }
+  }
+}
+
+async function getOtherBookmarksId() {
+  const otherBookmarks = await browser.bookmarks.search({title: "Other Bookmarks"});
+  return otherBookmarks[0].id;
+}
+
+async function findOrCreateFolder(parentId, folderName) {
+  const existingFolders = await browser.bookmarks.search({title: folderName});
+  const existingFolder = existingFolders.find(folder => folder.parentId === parentId);
+  
+  if (existingFolder) {
+    return existingFolder;
+  } else {
+    return await browser.bookmarks.create({
+      parentId: parentId,
+      title: folderName,
+      type: "folder"
+    });
+  }
+}
+--- End of background.js ---
+
+
+--- Start of bookmarkUtils.js ---
+
+const API_BASE_URL = 'http://localhost:5000/bookmarks';  // Adjust this to your actual API URL
+const MAX_RETRIES = 3;
+const RETRY_DELAY = 2000; // 2 seconds
+
+export async function getBookmarks() {
+  return new Promise((resolve) => {
+    chrome.bookmarks.getTree((bookmarkTreeNodes) => {
+      const bookmarks = flattenBookmarks(bookmarkTreeNodes);
+      resolve(bookmarks);
+    });
+  });
+}
+
+function flattenBookmarks(bookmarkNodes) {
+  let bookmarks = [];
+  for (const node of bookmarkNodes) {
+    if (node.url) {
+      bookmarks.push({ url: node.url, title: node.title });
+    }
+    if (node.children) {
+      bookmarks = bookmarks.concat(flattenBookmarks(node.children));
+    }
+  }
+  return bookmarks;
+}
+
+async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
+  try {
+    const response = await fetch(url, options);
+    if (response.status === 503 && retries > 0) {
+      console.log(`Server not ready, retrying in ${RETRY_DELAY/1000} seconds...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return fetchWithRetry(url, options, retries - 1);
+    }
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response;
+  } catch (error) {
+    if (retries > 0 && (error.message.includes('Failed to fetch') || error.message.includes('NetworkError'))) {
+      console.log(`Network error, retrying in ${RETRY_DELAY/1000} seconds...`);
+      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      return fetchWithRetry(url, options, retries - 1);
+    }
+    throw error;
+  }
+}
+
+export async function sendToServer(bookmarks) {
+  try {
+    const response = await fetchWithRetry(`${API_BASE_URL}/process`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(bookmarks),
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Error sending bookmarks to server:', error);
+    throw error;
+  }
+}
+
+export async function getVisualizationData() {
+  try {
+    const response = await fetchWithRetry(`${API_BASE_URL}/visualization`);
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching visualization data:', error);
+    throw error;
+  }
+}
+
+export async function applyOrganization(organizedBookmarks) {
+  console.log('Applying organization:', organizedBookmarks);
+  // Implementation for applying organization would go here
+}
+
+export async function checkServerStatus() {
+  try {
+    const response = await fetchWithRetry(`${API_BASE_URL.replace('/bookmarks', '')}/status`);
+    const data = await response.json();
+    return data.status;
+  } catch (error) {
+    console.error('Error checking server status:', error);
+    throw error;
+  }
+}
+--- End of bookmarkUtils.js ---
+
+
+--- Start of manifest.json ---
+
+{
+  "manifest_version": 2,
+  "name": "BERTopic Bookmark Organizer",
+  "version": "1.0",
+  "description": "Organizes bookmarks using BERTopic clustering",
+  "permissions": [
+    "bookmarks",
+    "storage",
+    "http://127.0.0.1:5000/*",
+    "https://127.0.0.1:5000/*"
+  ],
+  "browser_action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "icons": {
+    "48": "icon.png"
+  },
+  "background": {
+    "page": "background.html",
+    "persistent": false
+  },
+  "content_security_policy": "script-src 'self'; object-src 'self'",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "bertopic-bookmark-organizer@example.com"
+    }
+  }
+}
+--- End of manifest.json ---
+
+
+--- Start of popup.html ---
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bookmark Organizer</title>
+    <script src="d3.v7.min.js"></script>
+    <script src="visualization.js"></script>
+    <script type="module" src="popup.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: row;
+            gap: 20px;
+        }
+        .left-panel {
+            flex: 2;
+        }
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        button {
+            margin: 10px 0;
+            padding: 10px;
+            font-size: 16px;
+        }
+        #visualizationContainer {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #ccc;
+            margin-top: 20px;
+        }
+        #statusMessage {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="left-panel">
+        <div id="visualizationContainer"></div>
+    </div>
+    <div class="right-panel">
+        <h1>Bookmark Organizer</h1>
+        <button id="organizeBookmarks">Organize Bookmarks</button>
+        <div id="organizeResult" style="display: none;">
+            <h2>Organization Preview</h2>
+            <button id="applyOrganization">Apply Organization</button>
+        </div>
+        <div id="statusMessage" style="display: none;"></div>
+    </div>
+</body>
+</html>
+
+--- End of popup.html ---
+
+
+--- Start of popup.js ---
+
+import { getBookmarks, sendToServer, getVisualizationData, applyOrganization, checkServerStatus } from './bookmarkUtils.js';
+
+function initializePopup() {
+  const applyButton = document.getElementById('applyOrganization');
+  const organizeResult = document.getElementById('organizeResult');
+  const visualizationContainer = document.getElementById('visualizationContainer');
+  const statusMessage = document.getElementById('statusMessage');
+
+  function showStatus(message, isError = false) {
+    statusMessage.textContent = message;
+    statusMessage.classList.remove('hidden', 'bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800');
+    if (isError) {
+      statusMessage.classList.add('bg-red-100', 'text-red-800');
+    } else {
+      statusMessage.classList.add('bg-green-100', 'text-green-800');
+    }
+    statusMessage.style.display = 'block';
+  }
+
+  function hideStatus() {
+    statusMessage.style.display = 'none';
+  }
+
+  async function waitForServerReady() {
+    while (true) {
+      const status = await checkServerStatus();
+      if (status === 'ready') {
+        return;
+      } else if (status === 'initializing') {
+        showStatus('Server is initializing. Please wait...', false);
+        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds before checking again
+      } else {
+        throw new Error('Server is not available');
+      }
+    }
+  }
+
+  async function loadAndDisplayBookmarks() {
+    try {
+      hideStatus();
+
+      await waitForServerReady();
+
+      const response = await fetch('http://localhost:5000/bookmarks/list');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const bookmarks = await response.json();
+
+      await displayOrganizationPreview(bookmarks);
+      organizeResult.style.display = 'block';
+      showStatus('Bookmarks loaded successfully!');
+    } catch (error) {
+      console.error("Error loading bookmarks:", error);
+      showStatus(`Failed to load bookmarks: ${error.message}`, true);
+    }
+  }
+
+  async function applyBookmarkOrganization() {
+    try {
+      applyButton.disabled = true;
+      applyButton.textContent = 'Applying...';
+      hideStatus();
+
+      await waitForServerReady();
+
+      // Fetch the organized bookmarks from the server
+      const response = await fetch('http://localhost:5000/bookmarks/list');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const organizedBookmarks = await response.json();
+
+      // Apply the organization
+      await applyOrganization(organizedBookmarks);
+
+      showStatus("Bookmarks organized successfully!");
+      organizeResult.style.display = 'none';
+      visualizationContainer.innerHTML = '';
+    } catch (error) {
+      console.error("Error applying organization:", error);
+      showStatus(`Failed to apply organization: ${error.message}`, true);
+    } finally {
+      applyButton.disabled = false;
+      applyButton.textContent = 'Apply Organization';
+    }
+  }
+
+  async function displayOrganizationPreview(bookmarks) {
+    try {
+      const visualizationData = await getVisualizationData();
+      visualizationContainer.innerHTML = '';
+      if (typeof d3 === 'undefined') {
+        console.error('D3 library is not loaded');
+        visualizationContainer.textContent = 'Visualization library not available';
+        return;
+      }
+      if (typeof window.createVisualization === 'function') {
+        window.createVisualization(visualizationData.visualization_data);
+      } else {
+        console.error('createVisualization function is not available');
+        visualizationContainer.textContent = 'Visualization not available';
+      }
+      visualizationContainer.style.display = 'block';
+    } catch (error) {
+      console.error("Error displaying organization preview:", error);
+      showStatus(`Failed to display preview: ${error.message}`, true);
+    }
+  }
+
+  applyButton.addEventListener('click', applyBookmarkOrganization);
+
+  // Load bookmarks automatically when the popup opens
+  loadAndDisplayBookmarks();
+
+  // Check server status on popup open
+  checkServerStatus().then(status => {
+    if (status === 'initializing') {
+      showStatus('Server is initializing. Please wait...', false);
+    } else if (status !== 'ready') {
+      showStatus('Server is not available. Please try again later.', true);
+    }
+  }).catch(error => {
+    showStatus(`Error connecting to server: ${error.message}`, true);
+  });
+}
+
+// Initialize the popup when the DOM is fully loaded
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializePopup);
+} else {
+  initializePopup();
+}
+--- End of popup.js ---
+
+
+--- Start of visualization.js ---
+
+function createVisualization(data) {
+    const width = 800;
+    const height = 600;
+    const margin = { top: 20, right: 20, bottom: 30, left: 40 };
+
+    const svg = d3.select("#visualizationContainer")
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height)
+        .attr("viewBox", [0, 0, width, height])
+        .attr("style", "max-width: 100%; height: auto;");
+
+    const xExtent = d3.extent(data.nodes, d => d.x);
+    const yExtent = d3.extent(data.nodes, d => d.y);
+
+    const xScale = d3.scaleLinear()
+        .domain(xExtent)
+        .range([margin.left, width - margin.right]);
+
+    const yScale = d3.scaleLinear()
+        .domain(yExtent)
+        .range([height - margin.bottom, margin.top]);
+
+    const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+    // Create a group for zooming
+    const g = svg.append("g");
+
+    // Add a subtle background grid
+    const grid = g.append("g")
+        .attr("class", "grid");
+
+    grid.selectAll("line.x")
+        .data(d3.range(0, width, 50))
+        .enter().append("line")
+        .attr("class", "x")
+        .attr("x1", d => d)
+        .attr("x2", d => d)
+        .attr("y1", 0)
+        .attr("y2", height)
+        .style("stroke", "#e0e0e0");
+
+    grid.selectAll("line.y")
+        .data(d3.range(0, height, 50))
+        .enter().append("line")
+        .attr("class", "y")
+        .attr("x1", 0)
+        .attr("x2", width)
+        .attr("y1", d => d)
+        .attr("y2", d => d)
+        .style("stroke", "#e0e0e0");
+
+    const nodes = g.selectAll("circle")
+        .data(data.nodes)
+        .enter()
+        .append("circle")
+        .attr("cx", d => xScale(d.x))
+        .attr("cy", d => yScale(d.y))
+        .attr("r", 7)
+        .attr("fill", d => colorScale(d.topic))
+        .attr("stroke", "#fff")
+        .attr("stroke-width", 2)
+        .on("mouseover", handleMouseOver)
+        .on("mouseout", handleMouseOut)
+        .on("click", handleClick);
+
+    // Add tooltip
+    const tooltip = d3.select("body").append("div")
+        .attr("class", "tooltip")
+        .style("opacity", 0)
+        .style("position", "absolute")
+        .style("background-color", "white")
+        .style("border", "solid")
+        .style("border-width", "1px")
+        .style("border-radius", "5px")
+        .style("padding", "10px");
+
+    function handleMouseOver(event, d) {
+        d3.select(this)
+            .transition()
+            .duration(200)
+            .attr("r", 10)
+            .attr("stroke-width", 3);
+
+        tooltip.transition()
+            .duration(200)
+            .style("opacity", .9);
+        tooltip.html(`${d.title}<br/>Topic: ${d.topic}`)
+            .style("left", (event.pageX + 10) + "px")
+            .style("top", (event.pageY - 28) + "px");
+    }
+
+    function handleMouseOut() {
+        d3.select(this)
+            .transition()
+            .duration(200)
+            .attr("r", 7)
+            .attr("stroke-width", 2);
+
+        tooltip.transition()
+            .duration(500)
+            .style("opacity", 0);
+    }
+
+    function handleClick(event, d) {
+        console.log("Clicked node:", d);
+        // You can add more complex interactions here
+    }
+
+    // Add zooming capability
+    const zoom = d3.zoom()
+        .scaleExtent([0.5, 5])
+        .on("zoom", (event) => {
+            g.attr("transform", event.transform);
+        });
+
+    svg.call(zoom);
+
+    // Add a legend with improved styling
+    const legend = svg.append("g")
+        .attr("class", "legend")
+        .attr("transform", `translate(${width - 120}, 20)`);
+
+    const topics = [...new Set(data.nodes.map(d => d.topic))];
+
+    const legendItems = legend.selectAll(".legend-item")
+        .data(topics)
+        .enter()
+        .append("g")
+        .attr("class", "legend-item")
+        .attr("transform", (d, i) => `translate(0, ${i * 25})`);
+
+    legendItems.append("rect")
+        .attr("width", 15)
+        .attr("height", 15)
+        .attr("rx", 2)
+        .attr("ry", 2)
+        .attr("fill", d => colorScale(d));
+
+    legendItems.append("text")
+        .attr("x", 20)
+        .attr("y", 12)
+        .text(d => d)
+        .attr("font-size", "12px")
+        .attr("fill", "#333");
+
+    // Add search functionality
+    const searchInput = d3.select("#visualizationContainer")
+        .insert("input", ":first-child")
+        .attr("type", "text")
+        .attr("placeholder", "Search nodes...")
+        .style("margin-bottom", "10px")
+        .style("padding", "5px")
+        .style("width", "100%");
+
+    searchInput.on("input", function() {
+        const searchTerm = this.value.toLowerCase();
+        nodes.attr("opacity", d => d.title.toLowerCase().includes(searchTerm) ? 1 : 0.1);
+    });
+}
+
+window.createVisualization = createVisualization;
+--- End of visualization.js ---
+
