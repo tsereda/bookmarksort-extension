@@ -24,6 +24,23 @@ function flattenBookmarks(bookmarkNodes) {
   return bookmarks;
 }
 
+export async function pullAndSendBookmarks() {
+  const bookmarks = await getBookmarks();
+  const response = await fetch(`${API_BASE_URL}/add`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(bookmarks),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+
+  return await response.json();
+}
+
 async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
   try {
     const response = await fetch(url, options);

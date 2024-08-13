@@ -1,4 +1,5 @@
-import { getBookmarks, sendToServer, getVisualizationData, applyOrganization, checkServerStatus } from './bookmarkUtils.js';
+import { getBookmarks, sendToServer, getVisualizationData, applyOrganization, checkServerStatus, pullAndSendBookmarks } from './bookmarkUtils.js';
+
 
 function initializePopup() {
   const applyButton = document.getElementById('applyOrganization');
@@ -20,6 +21,18 @@ function initializePopup() {
   function hideStatus() {
     statusMessage.style.display = 'none';
   }
+
+  const pullBookmarksButton = document.getElementById('pullBookmarks');
+  pullBookmarksButton.addEventListener('click', async () => {
+    try {
+      showStatus('Pulling bookmarks...');
+      await pullAndSendBookmarks();
+      showStatus('Bookmarks pulled and sent successfully!');
+    } catch (error) {
+      console.error("Error pulling bookmarks:", error);
+      showStatus(`Failed to pull bookmarks: ${error.message}`, true);
+    }
+  });
 
   async function waitForServerReady() {
     while (true) {

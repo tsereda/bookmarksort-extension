@@ -1,4 +1,4 @@
-import { getBookmarks, sendToServer } from './bookmarkUtils.js';
+import { getBookmarks, sendToServer, pullAndSendBookmarks } from './bookmarkUtils.js';
 
 let organizedBookmarks = null;
 
@@ -16,6 +16,14 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
       sendResponse({success: true});
     }).catch((error) => {
       console.error("Error applying organization:", error);
+      sendResponse({success: false, error: error.message});
+    });
+    return true;
+  } else if (request.action === "pullBookmarks") {
+    pullBookmarks().then((result) => {
+      sendResponse({success: true, result: result});
+    }).catch((error) => {
+      console.error("Error pulling and sending bookmarks:", error);
       sendResponse({success: false, error: error.message});
     });
     return true;
@@ -114,5 +122,16 @@ async function findOrCreateFolder(parentId, folderName) {
       title: folderName,
       type: "folder"
     });
+  }
+}
+
+async function pullBookmarks() {
+  try {
+    const result = await pullAndSendBookmarks();
+    console.log("Bookmarks pulled and sent successfully:", result);
+    return result;
+  } catch (error) {
+    console.error("Error in pullBookmarks:", error);
+    throw error;
   }
 }
