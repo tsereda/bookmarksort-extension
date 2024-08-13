@@ -28,8 +28,8 @@ function initializePopup() {
             const result = await pullAndSendBookmarks((progress, count) => {
                 showStatus(`Processed ${count} bookmarks (${Math.round(progress * 100)}%)`);
             });
-            updateBookmarkCount(result.total);
             showStatus('Bookmarks pulled successfully!');
+            await refreshVisualization();
         } catch (error) {
             console.error("Error pulling bookmarks:", error);
             showStatus(`Failed to pull bookmarks: ${error.message}`, true);
@@ -39,7 +39,10 @@ function initializePopup() {
     async function refreshVisualization() {
         try {
             showStatus('Refreshing visualization...');
-            await updateVisualization();
+            const visualizationData = await getVisualizationData();
+            updateVisualization(visualizationData);
+            const bookmarkCount = countBookmarks(visualizationData);
+            updateBookmarkCount(bookmarkCount);
             showStatus('Visualization refreshed successfully!');
         } catch (error) {
             console.error("Error refreshing visualization:", error);
@@ -54,7 +57,7 @@ function initializePopup() {
             const params = gatherParams();
             const result = await sendToServer('/bookmarks/update_params', params);
             if (result.success) {
-                await updateVisualization();
+                await refreshVisualization();
                 showStatus('Organization regenerated successfully!');
             } else {
                 showStatus('Failed to regenerate organization: ' + result.error, true);
@@ -91,25 +94,24 @@ function initializePopup() {
         bookmarkCountValue.textContent = count;
     }
 
-    async function updateVisualization() {
-        try {
-            const visualizationData = await getVisualizationData();
-            visualizationContainer.innerHTML = '';
-            if (typeof d3 === 'undefined') {
-                console.error('D3 library is not loaded');
-                visualizationContainer.textContent = 'Visualization library not available';
-                return;
-            }
-            if (typeof window.createVisualization === 'function') {
-                window.createVisualization(visualizationData.visualization_data, visualizationContainer.clientWidth, visualizationContainer.clientHeight);
-            } else {
-                console.error('createVisualization function is not available');
-                visualizationContainer.textContent = 'Visualization not available';
-            }
-        } catch (error) {
-            console.error("Error updating visualization:", error);
-            showStatus(`Failed to update visualization: ${error.message}`, true);
+    function updateVisualization(visualizationData) {
+        visualizationContainer.innerHTML = '';
+        if (typeof d3 === 'undefined') {
+            console.error('D3 library is not loaded');
+            visualizationContainer.textContent = 'Visualization library not available';
+            return;
         }
+        if (typeof window.createVisualization === 'function') {
+            window.createVisualization(visualizationData.visualization_data, visualizationContainer.clientWidth, visualizationContainer.clientHeight);
+        } else {
+            console.error('createVisualization function is not available');
+            visualizationContainer.textContent = 'Visualization not available';
+        }
+    }
+
+    function countBookmarks(visualizationData) {
+        // Assuming visualizationData.visualization_data.nodes represents bookmarks
+        return visualizationData.visualization_data.nodes.length;
     }
 
     async function waitForServerReady() {
@@ -126,14 +128,11 @@ function initializePopup() {
         }
     }
 
-    // Initial bookmark count fetch and visualization update
-    fetch('/bookmarks/count')
-        .then(response => response.json())
-        .then(data => {
-            updateBookmarkCount(data.count);
-            return updateVisualization();
-        })
-        .catch(error => console.error('Error fetching initial data:', error));
+    // Initial visualization update when popup opens
+    refreshVisualization().catch(error => {
+        console.error("Error fetching initial data:", error);
+        showStatus(`Failed to load initial data: ${error.message}`, true);
+    });
 
     // Check server status on popup open
     checkServerStatus().then(status => {
