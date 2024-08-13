@@ -24,21 +24,52 @@ function flattenBookmarks(bookmarkNodes) {
   return bookmarks;
 }
 
-export async function pullAndSendBookmarks() {
-  const bookmarks = await getBookmarks();
+async function sendBookmarkBatchToServer(bookmarks) {
   const response = await fetch(`${API_BASE_URL}/add`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(bookmarks),
+    body: JSON.stringify({ bookmarks: bookmarks }),
   });
 
   if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
+    const errorText = await response.text();
+    throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
   }
 
   return await response.json();
+}
+
+// This function can now be used for both single and batch operations
+export async function pullAndSendBookmarks(progressCallback) {
+  const bookmarks = await getBookmarks();
+  
+  const batchSize = 100; // Adjust based on your needs
+  const batches = [];
+  
+  for (let i = 0; i < bookmarks.length; i += batchSize) {
+    batches.push(bookmarks.slice(i, i + batchSize));
+  }
+
+  const results = [];
+  for (let i = 0; i < batches.length; i++) {
+    try {
+      const batchResult = await sendBookmarkBatchToServer(batches[i]);
+      results.push(batchResult);
+      if (progressCallback) {
+        progressCallback((i + 1) / batches.length, (i + 1) * batchSize);
+      }
+    } catch (error) {
+      console.error(`Error sending bookmark batch:`, error);
+      results.push({
+        success: false,
+        errors: batches[i].map(b => ({ url: b.url, error: error.message }))
+      });
+    }
+  }
+
+  return results;
 }
 
 async function fetchWithRetry(url, options, retries = MAX_RETRIES) {

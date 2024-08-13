@@ -1,4 +1,5 @@
 function createVisualization(data) {
+    console.log("createVisualization called with data:", data);
     const width = 800;
     const height = 600;
     const margin = { top: 20, right: 20, bottom: 30, left: 40 };

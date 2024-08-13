@@ -26,8 +26,11 @@ function initializePopup() {
   pullBookmarksButton.addEventListener('click', async () => {
     try {
       showStatus('Pulling bookmarks...');
-      await pullAndSendBookmarks();
+      await pullAndSendBookmarks((progress, count) => {
+        showStatus(`Processed ${count} bookmarks (${Math.round(progress * 100)}%)`);
+      });
       showStatus('Bookmarks pulled and sent successfully!');
+      await loadAndDisplayBookmarks(); // Refresh the visualization after pulling
     } catch (error) {
       console.error("Error pulling bookmarks:", error);
       showStatus(`Failed to pull bookmarks: ${error.message}`, true);
@@ -102,6 +105,8 @@ function initializePopup() {
   async function displayOrganizationPreview(bookmarks) {
     try {
       const visualizationData = await getVisualizationData();
+      console.log("Visualization data received:", visualizationData);
+      
       visualizationContainer.innerHTML = '';
       if (typeof d3 === 'undefined') {
         console.error('D3 library is not loaded');
