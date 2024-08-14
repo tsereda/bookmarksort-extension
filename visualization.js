@@ -1,163 +1,172 @@
-function createVisualization(data) {
-    console.log("createVisualization called with data:", data);
-    const width = 800;
-    const height = 600;
-    const margin = { top: 20, right: 20, bottom: 30, left: 40 };
+// visualization.js
 
-    const svg = d3.select("#visualizationContainer")
+function createVisualization(data) {
+    console.log("Received visualization data:", data);
+    
+    if (!data || typeof data !== 'object') {
+        console.error("Invalid visualization data received");
+        document.getElementById('visualizationContainer').textContent = "Invalid visualization data received.";
+        return;
+    }
+
+    if (data.type === "node-link") {
+        createForceDirectedGraph(data);
+    } else if (data.type === "plotly") {
+        try {
+            const plotlyData = JSON.parse(data.data);
+            Plotly.newPlot('visualizationContainer', plotlyData.data, plotlyData.layout);
+        } catch (error) {
+            console.error("Error parsing Plotly data:", error);
+            document.getElementById('visualizationContainer').textContent = "Error parsing visualization data.";
+        }
+    } else {
+        console.error("Unsupported visualization type:", data.type || "unknown");
+        document.getElementById('visualizationContainer').textContent = 
+            "Unsupported visualization type. Please check the console for more information.";
+    }
+}
+
+function createForceDirectedGraph(data) {
+    console.log("Creating force-directed graph with data:", data);
+    const container = document.getElementById('visualizationContainer');
+    console.log("Container dimensions:", container.clientWidth, container.clientHeight);
+    
+    // Set minimum dimensions if the container is too small
+    const width = Math.max(container.clientWidth, 300);
+    const height = Math.max(container.clientHeight, 300);
+    
+    // Clear the container
+    container.innerHTML = '';
+    
+    const svg = d3.select(container)
         .append("svg")
         .attr("width", width)
         .attr("height", height)
         .attr("viewBox", [0, 0, width, height])
-        .attr("style", "max-width: 100%; height: auto;");
+        .style("background-color", "#f0f0f0");
+    
+    console.log("SVG created with dimensions:", width, height);
+    
+    // Create a group for the graph
+    const graph = svg.append("g");
+    
+    // Initialize node positions within the SVG bounds
+    data.nodes.forEach(node => {
+        node.x = Math.random() * width;
+        node.y = Math.random() * height;
+    });
 
-    const xExtent = d3.extent(data.nodes, d => d.x);
-    const yExtent = d3.extent(data.nodes, d => d.y);
+    // Create a color scale for topics
+    const topics = [...new Set(data.nodes.map(node => node.topic))];
+    const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(topics);
 
-    const xScale = d3.scaleLinear()
-        .domain(xExtent)
-        .range([margin.left, width - margin.right]);
+    const simulation = d3.forceSimulation(data.nodes)
+        .force("center", d3.forceCenter(width / 2, height / 2))
+        .force("charge", d3.forceManyBody().strength(-30))
+        .force("collision", d3.forceCollide().radius(10))
+        .force("x", d3.forceX(width / 2).strength(0.1))
+        .force("y", d3.forceY(height / 2).strength(0.1));
+    
+    // If links exist, add them to the simulation
+    if (data.links && data.links.length > 0) {
+        simulation.force("link", d3.forceLink(data.links).id(d => d.id).distance(50));
+        
+        const link = graph.append("g")
+            .attr("stroke", "#999")
+            .attr("stroke-opacity", 0.6)
+            .selectAll("line")
+            .data(data.links)
+            .join("line");
+    }
 
-    const yScale = d3.scaleLinear()
-        .domain(yExtent)
-        .range([height - margin.bottom, margin.top]);
-
-    const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
-
-    // Create a group for zooming
-    const g = svg.append("g");
-
-    // Add a subtle background grid
-    const grid = g.append("g")
-        .attr("class", "grid");
-
-    grid.selectAll("line.x")
-        .data(d3.range(0, width, 50))
-        .enter().append("line")
-        .attr("class", "x")
-        .attr("x1", d => d)
-        .attr("x2", d => d)
-        .attr("y1", 0)
-        .attr("y2", height)
-        .style("stroke", "#e0e0e0");
-
-    grid.selectAll("line.y")
-        .data(d3.range(0, height, 50))
-        .enter().append("line")
-        .attr("class", "y")
-        .attr("x1", 0)
-        .attr("x2", width)
-        .attr("y1", d => d)
-        .attr("y2", d => d)
-        .style("stroke", "#e0e0e0");
-
-    const nodes = g.selectAll("circle")
-        .data(data.nodes)
-        .enter()
-        .append("circle")
-        .attr("cx", d => xScale(d.x))
-        .attr("cy", d => yScale(d.y))
-        .attr("r", 7)
-        .attr("fill", d => colorScale(d.topic))
+    const node = graph.append("g")
         .attr("stroke", "#fff")
-        .attr("stroke-width", 2)
-        .on("mouseover", handleMouseOver)
-        .on("mouseout", handleMouseOut)
-        .on("click", handleClick);
-
-    // Add tooltip
-    const tooltip = d3.select("body").append("div")
-        .attr("class", "tooltip")
-        .style("opacity", 0)
-        .style("position", "absolute")
-        .style("background-color", "white")
-        .style("border", "solid")
-        .style("border-width", "1px")
-        .style("border-radius", "5px")
-        .style("padding", "10px");
-
-    function handleMouseOver(event, d) {
-        d3.select(this)
-            .transition()
-            .duration(200)
-            .attr("r", 10)
-            .attr("stroke-width", 3);
-
-        tooltip.transition()
-            .duration(200)
-            .style("opacity", .9);
-        tooltip.html(`${d.title}<br/>Topic: ${d.topic}`)
-            .style("left", (event.pageX + 10) + "px")
-            .style("top", (event.pageY - 28) + "px");
-    }
-
-    function handleMouseOut() {
-        d3.select(this)
-            .transition()
-            .duration(200)
-            .attr("r", 7)
-            .attr("stroke-width", 2);
-
-        tooltip.transition()
-            .duration(500)
-            .style("opacity", 0);
-    }
-
-    function handleClick(event, d) {
-        console.log("Clicked node:", d);
-        // You can add more complex interactions here
-    }
-
-    // Add zooming capability
+        .attr("stroke-width", 1.5)
+        .selectAll("circle")
+        .data(data.nodes)
+        .join("circle")
+        .attr("r", 5)
+        .attr("fill", d => colorScale(d.topic || "default"))
+        .call(drag(simulation));
+    
+    node.append("title")
+        .text(d => `${d.title || "Untitled"} (Topic: ${d.topic || "Unknown"})`);
+    
+    console.log("Nodes added to SVG");
+    
+    simulation.on("tick", () => {
+        // Constrain the nodes within the SVG bounds
+        node
+            .attr("cx", d => Math.max(5, Math.min(width - 5, d.x)))
+            .attr("cy", d => Math.max(5, Math.min(height - 5, d.y)));
+        
+        if (data.links && data.links.length > 0) {
+            link
+                .attr("x1", d => d.source.x)
+                .attr("y1", d => d.source.y)
+                .attr("x2", d => d.target.x)
+                .attr("y2", d => d.target.y);
+        }
+    });
+    
+    // Add zoom behavior
     const zoom = d3.zoom()
-        .scaleExtent([0.5, 5])
+        .scaleExtent([0.1, 10])
         .on("zoom", (event) => {
-            g.attr("transform", event.transform);
+            graph.attr("transform", event.transform);
         });
-
+    
     svg.call(zoom);
-
-    // Add a legend with improved styling
+    
+    // Add a legend
     const legend = svg.append("g")
         .attr("class", "legend")
         .attr("transform", `translate(${width - 120}, 20)`);
 
-    const topics = [...new Set(data.nodes.map(d => d.topic))];
-
-    const legendItems = legend.selectAll(".legend-item")
+    legend.selectAll("rect")
         .data(topics)
         .enter()
-        .append("g")
-        .attr("class", "legend-item")
-        .attr("transform", (d, i) => `translate(0, ${i * 25})`);
-
-    legendItems.append("rect")
-        .attr("width", 15)
-        .attr("height", 15)
-        .attr("rx", 2)
-        .attr("ry", 2)
+        .append("rect")
+        .attr("y", (d, i) => i * 20)
+        .attr("width", 10)
+        .attr("height", 10)
         .attr("fill", d => colorScale(d));
 
-    legendItems.append("text")
-        .attr("x", 20)
-        .attr("y", 12)
+    legend.selectAll("text")
+        .data(topics)
+        .enter()
+        .append("text")
+        .attr("x", 15)
+        .attr("y", (d, i) => i * 20 + 9)
         .text(d => d)
-        .attr("font-size", "12px")
-        .attr("fill", "#333");
+        .style("font-size", "12px");
 
-    // Add search functionality
-    const searchInput = d3.select("#visualizationContainer")
-        .insert("input", ":first-child")
-        .attr("type", "text")
-        .attr("placeholder", "Search nodes...")
-        .style("margin-bottom", "10px")
-        .style("padding", "5px")
-        .style("width", "100%");
-
-    searchInput.on("input", function() {
-        const searchTerm = this.value.toLowerCase();
-        nodes.attr("opacity", d => d.title.toLowerCase().includes(searchTerm) ? 1 : 0.1);
-    });
+    console.log("Simulation started");
 }
 
+function drag(simulation) {
+    function dragstarted(event) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        event.subject.fx = event.subject.x;
+        event.subject.fy = event.subject.y;
+    }
+    
+    function dragged(event) {
+        event.subject.fx = event.x;
+        event.subject.fy = event.y;
+    }
+    
+    function dragended(event) {
+        if (!event.active) simulation.alphaTarget(0);
+        event.subject.fx = null;
+        event.subject.fy = null;
+    }
+    
+    return d3.drag()
+        .on("start", dragstarted)
+        .on("drag", dragged)
+        .on("end", dragended);
+}
+
+// Make createVisualization available globally
 window.createVisualization = createVisualization;

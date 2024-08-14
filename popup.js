@@ -39,15 +39,48 @@ function initializePopup() {
     async function refreshVisualization() {
         try {
             showStatus('Refreshing visualization...');
-            const visualizationData = await getVisualizationData();
-            updateVisualization(visualizationData);
-            const bookmarkCount = countBookmarks(visualizationData);
-            updateBookmarkCount(bookmarkCount);
-            showStatus('Visualization refreshed successfully!');
+            const response = await getVisualizationData();
+            console.log("Visualization data response:", response);
+            
+            if (response.success && response.visualization_data) {
+                updateVisualization(response.visualization_data);
+                const bookmarkCount = countBookmarks(response.visualization_data);
+                updateBookmarkCount(bookmarkCount);
+                showStatus('Visualization refreshed successfully!');
+            } else {
+                throw new Error(response.error || 'Invalid response from server');
+            }
         } catch (error) {
             console.error("Error refreshing visualization:", error);
             showStatus(`Failed to refresh visualization: ${error.message}`, true);
         }
+    }
+
+    function updateVisualization(visualizationData) {
+        console.log("Updating visualization with data:", visualizationData);
+        visualizationContainer.innerHTML = '';
+        if (typeof window.createVisualization === 'function') {
+            window.createVisualization(visualizationData);
+        } else {
+            console.error('createVisualization function is not available');
+            visualizationContainer.textContent = 'Visualization function not available';
+        }
+    }
+
+    function countBookmarks(visualizationData) {
+        console.log("Counting bookmarks from:", visualizationData);
+        if (visualizationData.nodes) {
+            return visualizationData.nodes.length;
+        } else if (visualizationData.data) {
+            try {
+                const plotlyData = JSON.parse(visualizationData.data);
+                // Assuming the first trace contains the bookmark data
+                return plotlyData.data[0].x.length;
+            } catch (error) {
+                console.error("Error parsing visualization data for bookmark count:", error);
+            }
+        }
+        return 0;
     }
 
     async function regenerateOrganization() {
@@ -92,26 +125,6 @@ function initializePopup() {
 
     function updateBookmarkCount(count) {
         bookmarkCountValue.textContent = count;
-    }
-
-    function updateVisualization(visualizationData) {
-        visualizationContainer.innerHTML = '';
-        if (typeof d3 === 'undefined') {
-            console.error('D3 library is not loaded');
-            visualizationContainer.textContent = 'Visualization library not available';
-            return;
-        }
-        if (typeof window.createVisualization === 'function') {
-            window.createVisualization(visualizationData.visualization_data, visualizationContainer.clientWidth, visualizationContainer.clientHeight);
-        } else {
-            console.error('createVisualization function is not available');
-            visualizationContainer.textContent = 'Visualization not available';
-        }
-    }
-
-    function countBookmarks(visualizationData) {
-        // Assuming visualizationData.visualization_data.nodes represents bookmarks
-        return visualizationData.visualization_data.nodes.length;
     }
 
     async function waitForServerReady() {
