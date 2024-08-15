@@ -3,39 +3,20 @@
 function createVisualization(data) {
     console.log("Received visualization data:", data);
     
-    if (!data || typeof data !== 'object') {
+    if (!data || typeof data !== 'object' || !data.nodes || !Array.isArray(data.nodes)) {
         console.error("Invalid visualization data received");
         document.getElementById('visualizationContainer').textContent = "Invalid visualization data received.";
         return;
     }
 
-    if (data.type === "node-link") {
-        createForceDirectedGraph(data);
-    } else if (data.type === "plotly") {
-        try {
-            const plotlyData = JSON.parse(data.data);
-            Plotly.newPlot('visualizationContainer', plotlyData.data, plotlyData.layout);
-        } catch (error) {
-            console.error("Error parsing Plotly data:", error);
-            document.getElementById('visualizationContainer').textContent = "Error parsing visualization data.";
-        }
-    } else {
-        console.error("Unsupported visualization type:", data.type || "unknown");
-        document.getElementById('visualizationContainer').textContent = 
-            "Unsupported visualization type. Please check the console for more information.";
-    }
+    createHybridGraph(data);
 }
 
-function createForceDirectedGraph(data) {
-    console.log("Creating force-directed graph with data:", data);
+function createHybridGraph(data) {
     const container = document.getElementById('visualizationContainer');
-    console.log("Container dimensions:", container.clientWidth, container.clientHeight);
+    const width = container.clientWidth;
+    const height = container.clientHeight;
     
-    // Set minimum dimensions if the container is too small
-    const width = Math.max(container.clientWidth, 300);
-    const height = Math.max(container.clientHeight, 300);
-    
-    // Clear the container
     container.innerHTML = '';
     
     const svg = d3.select(container)
@@ -45,79 +26,92 @@ function createForceDirectedGraph(data) {
         .attr("viewBox", [0, 0, width, height])
         .style("background-color", "#f0f0f0");
     
-    console.log("SVG created with dimensions:", width, height);
-    
-    // Create a group for the graph
     const graph = svg.append("g");
-    
-    // Initialize node positions within the SVG bounds
+
+    // Ensure all nodes have a topic
     data.nodes.forEach(node => {
-        node.x = Math.random() * width;
-        node.y = Math.random() * height;
+        if (!node.topic) {
+            node.topic = "Uncategorized";
+        }
     });
+
+    // Scale the x and y coordinates to fit the SVG dimensions
+    const xExtent = d3.extent(data.nodes, d => d.x);
+    const yExtent = d3.extent(data.nodes, d => d.y);
+    const xScale = d3.scaleLinear().domain(xExtent).range([50, width - 50]);
+    const yScale = d3.scaleLinear().domain(yExtent).range([50, height - 50]);
+
+    data.nodes.forEach(node => {
+        node.x = xScale(node.x);
+        node.y = yScale(node.y);
+    });
+
+    // Create a root node to connect all topics
+    const rootNode = { id: "root", topic: null, x: width / 2, y: height / 2 };
+    data.nodes.push(rootNode);
+
+    // Create hierarchical structure
+    const stratify = d3.stratify()
+        .id(d => d.id)
+        .parentId(d => d.topic === null ? null : "root");
+
+    const root = stratify(data.nodes);
 
     // Create a color scale for topics
     const topics = [...new Set(data.nodes.map(node => node.topic))];
     const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(topics);
 
+    // Create links based on the hierarchical structure
+    const links = root.links().filter(link => link.source.id !== "root");
+
     const simulation = d3.forceSimulation(data.nodes)
-        .force("center", d3.forceCenter(width / 2, height / 2))
-        .force("charge", d3.forceManyBody().strength(-30))
-        .force("collision", d3.forceCollide().radius(10))
-        .force("x", d3.forceX(width / 2).strength(0.1))
-        .force("y", d3.forceY(height / 2).strength(0.1));
-    
-    // If links exist, add them to the simulation
-    if (data.links && data.links.length > 0) {
-        simulation.force("link", d3.forceLink(data.links).id(d => d.id).distance(50));
-        
-        const link = graph.append("g")
-            .attr("stroke", "#999")
-            .attr("stroke-opacity", 0.6)
-            .selectAll("line")
-            .data(data.links)
-            .join("line");
-    }
+        .force("link", d3.forceLink(links).id(d => d.id).distance(30).strength(0.05))
+        .force("charge", d3.forceManyBody().strength(-10))
+        .force("center", d3.forceCenter(width / 2, height / 2).strength(0.05))
+        .force("x", d3.forceX(d => d.x).strength(0.2))
+        .force("y", d3.forceY(d => d.y).strength(0.2));
+
+    const link = graph.append("g")
+        .attr("stroke", "#999")
+        .attr("stroke-opacity", 0.6)
+        .selectAll("line")
+        .data(links)
+        .join("line");
 
     const node = graph.append("g")
         .attr("stroke", "#fff")
         .attr("stroke-width", 1.5)
         .selectAll("circle")
-        .data(data.nodes)
+        .data(data.nodes.filter(d => d.id !== "root"))
         .join("circle")
         .attr("r", 5)
         .attr("fill", d => colorScale(d.topic || "default"))
         .call(drag(simulation));
-    
+
     node.append("title")
         .text(d => `${d.title || "Untitled"} (Topic: ${d.topic || "Unknown"})`);
-    
-    console.log("Nodes added to SVG");
-    
+
     simulation.on("tick", () => {
-        // Constrain the nodes within the SVG bounds
+        link
+            .attr("x1", d => d.source.x)
+            .attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x)
+            .attr("y2", d => d.target.y);
+
         node
-            .attr("cx", d => Math.max(5, Math.min(width - 5, d.x)))
-            .attr("cy", d => Math.max(5, Math.min(height - 5, d.y)));
-        
-        if (data.links && data.links.length > 0) {
-            link
-                .attr("x1", d => d.source.x)
-                .attr("y1", d => d.source.y)
-                .attr("x2", d => d.target.x)
-                .attr("y2", d => d.target.y);
-        }
+            .attr("cx", d => d.x)
+            .attr("cy", d => d.y);
     });
-    
+
     // Add zoom behavior
     const zoom = d3.zoom()
         .scaleExtent([0.1, 10])
         .on("zoom", (event) => {
             graph.attr("transform", event.transform);
         });
-    
+
     svg.call(zoom);
-    
+
     // Add a legend
     const legend = svg.append("g")
         .attr("class", "legend")
@@ -140,8 +134,6 @@ function createForceDirectedGraph(data) {
         .attr("y", (d, i) => i * 20 + 9)
         .text(d => d)
         .style("font-size", "12px");
-
-    console.log("Simulation started");
 }
 
 function drag(simulation) {
@@ -168,5 +160,4 @@ function drag(simulation) {
         .on("end", dragended);
 }
 
-// Make createVisualization available globally
 window.createVisualization = createVisualization;
