@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://localhost:5000/bookmarks';  // Adjust this to your actual API URL
+const API_BASE_URL = 'http://localhost:5000';
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 2000; // 2 seconds
 
@@ -24,13 +24,19 @@ function flattenBookmarks(bookmarkNodes) {
   return bookmarks;
 }
 
-async function sendBookmarkBatchToServer(bookmarks) {
-  const response = await fetch(`${API_BASE_URL}/add`, {
+async function sendBookmarkToServer(bookmark) {
+  const response = await fetchWithRetry(`${API_BASE_URL}/bookmarks/`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ bookmarks: bookmarks }),
+    body: JSON.stringify({
+      title: bookmark.title,
+      url: bookmark.url,
+      tags: [],
+      embedding: [],
+      topic: 0
+    }),
   });
 
   if (!response.ok) {
@@ -41,30 +47,44 @@ async function sendBookmarkBatchToServer(bookmarks) {
   return await response.json();
 }
 
-// This function can now be used for both single and batch operations
+export async function sendToServer(bookmarks) {
+  try {
+    const response = await fetchWithRetry(`${API_BASE_URL}/organize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(bookmarks),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error sending bookmarks to server:', error);
+    throw error;
+  }
+}
+
 export async function pullAndSendBookmarks(progressCallback) {
   const bookmarks = await getBookmarks();
   
-  const batchSize = 100; // Adjust based on your needs
-  const batches = [];
-  
-  for (let i = 0; i < bookmarks.length; i += batchSize) {
-    batches.push(bookmarks.slice(i, i + batchSize));
-  }
-
   const results = [];
-  for (let i = 0; i < batches.length; i++) {
+  for (let i = 0; i < bookmarks.length; i++) {
     try {
-      const batchResult = await sendBookmarkBatchToServer(batches[i]);
-      results.push(batchResult);
+      const result = await sendBookmarkToServer(bookmarks[i]);
+      results.push(result);
       if (progressCallback) {
-        progressCallback((i + 1) / batches.length, (i + 1) * batchSize);
+        progressCallback((i + 1) / bookmarks.length, i + 1);
       }
     } catch (error) {
-      console.error(`Error sending bookmark batch:`, error);
+      console.error(`Error sending bookmark:`, error);
       results.push({
         success: false,
-        errors: batches[i].map(b => ({ url: b.url, error: error.message }))
+        error: error.message,
+        bookmark: bookmarks[i]
       });
     }
   }
@@ -94,44 +114,34 @@ async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
   }
 }
 
-export async function sendToServer(bookmarks) {
+export async function getHierarchicalTopics() {
   try {
-    const response = await fetchWithRetry(`${API_BASE_URL}/process`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/topics/hierarchical`);
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching hierarchical topics:', error);
+    throw error;
+  }
+}
+
+export async function getTopicTree() {
+  try {
+    const response = await fetchWithRetry(`${API_BASE_URL}/topics/tree`);
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching topic tree:', error);
+    throw error;
+  }
+}
+
+export async function updateTopics() {
+  try {
+    const response = await fetchWithRetry(`${API_BASE_URL}/topics/update`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(bookmarks),
     });
     return await response.json();
   } catch (error) {
-    console.error('Error sending bookmarks to server:', error);
-    throw error;
-  }
-}
-
-export async function getVisualizationData() {
-  try {
-    const response = await fetchWithRetry(`${API_BASE_URL}/visualization`);
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching visualization data:', error);
-    throw error;
-  }
-}
-
-export async function applyOrganization(organizedBookmarks) {
-  console.log('Applying organization:', organizedBookmarks);
-  // Implementation for applying organization would go here
-}
-
-export async function checkServerStatus() {
-  try {
-    const response = await fetchWithRetry(`${API_BASE_URL.replace('/bookmarks', '')}/status`);
-    const data = await response.json();
-    return data.status;
-  } catch (error) {
-    console.error('Error checking server status:', error);
+    console.error('Error updating topics:', error);
     throw error;
   }
 }

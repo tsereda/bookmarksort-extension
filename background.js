@@ -1,4 +1,4 @@
-import { getBookmarks, sendToServer, pullAndSendBookmarks } from './bookmarkUtils.js';
+import { getBookmarks, sendToServer } from './bookmarkUtils.js';
 
 let organizedBookmarks = null;
 
@@ -127,7 +127,8 @@ async function findOrCreateFolder(parentId, folderName) {
 
 async function pullBookmarks() {
   try {
-    const result = await pullAndSendBookmarks();
+    const bookmarks = await getBookmarks();
+    const result = await sendToServer(bookmarks);
     console.log("Bookmarks pulled and sent successfully:", result);
     return result;
   } catch (error) {

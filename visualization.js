@@ -1,18 +1,23 @@
-// visualization.js
-
 function createVisualization(data) {
     console.log("Received visualization data:", data);
     
-    if (!data || typeof data !== 'object' || !data.nodes || !Array.isArray(data.nodes)) {
+    if (!data || typeof data !== 'object') {
         console.error("Invalid visualization data received");
         document.getElementById('visualizationContainer').textContent = "Invalid visualization data received.";
         return;
     }
 
-    createHybridGraph(data);
+    if (data.root) {
+        createTopicTree(data);
+    } else if (Array.isArray(data)) {
+        createHierarchicalTopics(data);
+    } else {
+        console.error("Unknown data format");
+        document.getElementById('visualizationContainer').textContent = "Unknown data format received.";
+    }
 }
 
-function createHybridGraph(data) {
+function createTopicTree(data) {
     const container = document.getElementById('visualizationContainer');
     const width = container.clientWidth;
     const height = container.clientHeight;
@@ -25,139 +30,98 @@ function createHybridGraph(data) {
         .attr("height", height)
         .attr("viewBox", [0, 0, width, height])
         .style("background-color", "#f0f0f0");
+
+    const g = svg.append("g");
+
+    const root = d3.hierarchy(data.root);
     
-    const graph = svg.append("g");
+    const treeLayout = d3.tree().size([height - 100, width - 160]);
+    treeLayout(root);
 
-    // Ensure all nodes have a topic
-    data.nodes.forEach(node => {
-        if (!node.topic) {
-            node.topic = "Uncategorized";
-        }
-    });
+    const link = g.selectAll(".link")
+        .data(root.links())
+        .enter().append("path")
+        .attr("class", "link")
+        .attr("d", d3.linkHorizontal()
+            .x(d => d.y)
+            .y(d => d.x));
 
-    // Scale the x and y coordinates to fit the SVG dimensions
-    const xExtent = d3.extent(data.nodes, d => d.x);
-    const yExtent = d3.extent(data.nodes, d => d.y);
-    const xScale = d3.scaleLinear().domain(xExtent).range([50, width - 50]);
-    const yScale = d3.scaleLinear().domain(yExtent).range([50, height - 50]);
+    const node = g.selectAll(".node")
+        .data(root.descendants())
+        .enter().append("g")
+        .attr("class", d => "node" + (d.children ? " node--internal" : " node--leaf"))
+        .attr("transform", d => `translate(${d.y},${d.x})`);
 
-    data.nodes.forEach(node => {
-        node.x = xScale(node.x);
-        node.y = yScale(node.y);
-    });
+    node.append("circle")
+        .attr("r", 5);
 
-    // Create a root node to connect all topics
-    const rootNode = { id: "root", topic: null, x: width / 2, y: height / 2 };
-    data.nodes.push(rootNode);
-
-    // Create hierarchical structure
-    const stratify = d3.stratify()
-        .id(d => d.id)
-        .parentId(d => d.topic === null ? null : "root");
-
-    const root = stratify(data.nodes);
-
-    // Create a color scale for topics
-    const topics = [...new Set(data.nodes.map(node => node.topic))];
-    const colorScale = d3.scaleOrdinal(d3.schemeCategory10).domain(topics);
-
-    // Create links based on the hierarchical structure
-    const links = root.links().filter(link => link.source.id !== "root");
-
-    const simulation = d3.forceSimulation(data.nodes)
-        .force("link", d3.forceLink(links).id(d => d.id).distance(30).strength(0.05))
-        .force("charge", d3.forceManyBody().strength(-10))
-        .force("center", d3.forceCenter(width / 2, height / 2).strength(0.05))
-        .force("x", d3.forceX(d => d.x).strength(0.2))
-        .force("y", d3.forceY(d => d.y).strength(0.2));
-
-    const link = graph.append("g")
-        .attr("stroke", "#999")
-        .attr("stroke-opacity", 0.6)
-        .selectAll("line")
-        .data(links)
-        .join("line");
-
-    const node = graph.append("g")
-        .attr("stroke", "#fff")
-        .attr("stroke-width", 1.5)
-        .selectAll("circle")
-        .data(data.nodes.filter(d => d.id !== "root"))
-        .join("circle")
-        .attr("r", 5)
-        .attr("fill", d => colorScale(d.topic || "default"))
-        .call(drag(simulation));
-
-    node.append("title")
-        .text(d => `${d.title || "Untitled"} (Topic: ${d.topic || "Unknown"})`);
-
-    simulation.on("tick", () => {
-        link
-            .attr("x1", d => d.source.x)
-            .attr("y1", d => d.source.y)
-            .attr("x2", d => d.target.x)
-            .attr("y2", d => d.target.y);
-
-        node
-            .attr("cx", d => d.x)
-            .attr("cy", d => d.y);
-    });
+    node.append("text")
+        .attr("dy", ".31em")
+        .attr("x", d => d.children ? -8 : 8)
+        .style("text-anchor", d => d.children ? "end" : "start")
+        .text(d => d.data.name);
 
     // Add zoom behavior
     const zoom = d3.zoom()
         .scaleExtent([0.1, 10])
         .on("zoom", (event) => {
-            graph.attr("transform", event.transform);
+            g.attr("transform", event.transform);
         });
 
     svg.call(zoom);
-
-    // Add a legend
-    const legend = svg.append("g")
-        .attr("class", "legend")
-        .attr("transform", `translate(${width - 120}, 20)`);
-
-    legend.selectAll("rect")
-        .data(topics)
-        .enter()
-        .append("rect")
-        .attr("y", (d, i) => i * 20)
-        .attr("width", 10)
-        .attr("height", 10)
-        .attr("fill", d => colorScale(d));
-
-    legend.selectAll("text")
-        .data(topics)
-        .enter()
-        .append("text")
-        .attr("x", 15)
-        .attr("y", (d, i) => i * 20 + 9)
-        .text(d => d)
-        .style("font-size", "12px");
 }
 
-function drag(simulation) {
-    function dragstarted(event) {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-        event.subject.fx = event.subject.x;
-        event.subject.fy = event.subject.y;
-    }
+function createHierarchicalTopics(data) {
+    const container = document.getElementById('visualizationContainer');
+    const width = container.clientWidth;
+    const height = container.clientHeight;
     
-    function dragged(event) {
-        event.subject.fx = event.x;
-        event.subject.fy = event.y;
-    }
+    container.innerHTML = '';
     
-    function dragended(event) {
-        if (!event.active) simulation.alphaTarget(0);
-        event.subject.fx = null;
-        event.subject.fy = null;
-    }
-    
-    return d3.drag()
-        .on("start", dragstarted)
-        .on("drag", dragged)
-        .on("end", dragended);
+    const svg = d3.select(container)
+        .append("svg")
+        .attr("width", width)
+        .attr("height", height)
+        .attr("viewBox", [0, 0, width, height])
+        .style("background-color", "#f0f0f0");
+
+    const g = svg.append("g");
+
+    const pack = d3.pack()
+        .size([width - 40, height - 40])
+        .padding(10);
+
+    const root = d3.hierarchy({children: data})
+        .sum(d => d.Topics ? d.Topics.length : 0);
+
+    const nodes = pack(root).descendants();
+
+    const node = g.selectAll("g")
+        .data(nodes)
+        .enter().append("g")
+        .attr("transform", d => `translate(${d.x},${d.y})`);
+
+    node.append("circle")
+        .attr("r", d => d.r)
+        .attr("fill", d => d.children ? "#69b3a2" : "#E8A87C")
+        .attr("opacity", 0.7);
+
+    node.append("text")
+        .attr("dy", ".3em")
+        .style("text-anchor", "middle")
+        .text(d => d.data.Parent_Name || d.data.Child_Left_Name || d.data.Child_Right_Name)
+        .style("font-size", function(d) {
+            return `${Math.min(2 * d.r, (2 * d.r - 8) / this.getComputedTextLength() * 12)}px`;
+        });
+
+    // Add zoom behavior
+    const zoom = d3.zoom()
+        .scaleExtent([0.1, 10])
+        .on("zoom", (event) => {
+            g.attr("transform", event.transform);
+        });
+
+    svg.call(zoom);
 }
 
 window.createVisualization = createVisualization;
