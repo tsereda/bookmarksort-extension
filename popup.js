@@ -1,8 +1,9 @@
 import {
     pullAndSendBookmarks,
-    getHierarchicalTopics,
     getTopicTree,
-    updateTopics
+    updateTopics,
+    getScatterPlotData,
+    getSunburstData
 } from './bookmarkUtils.js';
 
 function initializePopup() {
@@ -43,11 +44,10 @@ function initializePopup() {
     async function refreshVisualization() {
         try {
             showStatus('Refreshing visualization...');
-            const hierarchicalTopics = await getHierarchicalTopics();
-            const topicTree = await getTopicTree();
+            const scatterPlotData = await getScatterPlotData();
+            const sunburstData = await getSunburstData();
             
-            // Choose which visualization to display based on your preference
-            updateVisualization(hierarchicalTopics); // or topicTree
+            updateVisualization(scatterPlotData, sunburstData);
             
             showStatus('Visualization refreshed successfully!');
         } catch (error) {
@@ -56,11 +56,11 @@ function initializePopup() {
         }
     }
 
-    function updateVisualization(visualizationData) {
-        console.log("Updating visualization with data:", visualizationData);
+    function updateVisualization(scatterPlotData, sunburstData) {
+        console.log("Updating visualization with data:", { scatterPlotData, sunburstData });
         visualizationContainer.innerHTML = '';
         if (typeof window.createVisualization === 'function') {
-            window.createVisualization(visualizationData);
+            window.createVisualization(scatterPlotData, sunburstData);
         } else {
             console.error('createVisualization function is not available');
             visualizationContainer.textContent = 'Visualization function not available';

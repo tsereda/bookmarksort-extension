@@ -33,9 +33,7 @@ async function sendBookmarkToServer(bookmark) {
     body: JSON.stringify({
       title: bookmark.title,
       url: bookmark.url,
-      tags: [],
-      embedding: [],
-      topic: 0
+      tags: []
     }),
   });
 
@@ -49,7 +47,7 @@ async function sendBookmarkToServer(bookmark) {
 
 export async function sendToServer(bookmarks) {
   try {
-    const response = await fetchWithRetry(`${API_BASE_URL}/organize`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/bookmarks/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -114,19 +112,9 @@ async function fetchWithRetry(url, options, retries = MAX_RETRIES) {
   }
 }
 
-export async function getHierarchicalTopics() {
-  try {
-    const response = await fetchWithRetry(`${API_BASE_URL}/topics/hierarchical`);
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching hierarchical topics:', error);
-    throw error;
-  }
-}
-
 export async function getTopicTree() {
   try {
-    const response = await fetchWithRetry(`${API_BASE_URL}/topics/tree`);
+    const response = await fetchWithRetry(`${API_BASE_URL}/topics/tree_json`);
     return await response.json();
   } catch (error) {
     console.error('Error fetching topic tree:', error);
@@ -136,12 +124,32 @@ export async function getTopicTree() {
 
 export async function updateTopics() {
   try {
-    const response = await fetchWithRetry(`${API_BASE_URL}/topics/update`, {
+    const response = await fetchWithRetry(`${API_BASE_URL}/topics/`, {
       method: 'POST',
     });
     return await response.json();
   } catch (error) {
     console.error('Error updating topics:', error);
+    throw error;
+  }
+}
+
+export async function getScatterPlotData() {
+  try {
+    const response = await fetchWithRetry(`${API_BASE_URL}/visualization/scatter_plot`);
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching scatter plot data:', error);
+    throw error;
+  }
+}
+
+export async function getSunburstData() {
+  try {
+    const response = await fetchWithRetry(`${API_BASE_URL}/visualization/sunburst`);
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching sunburst data:', error);
     throw error;
   }
 }
