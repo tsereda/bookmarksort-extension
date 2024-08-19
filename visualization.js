@@ -39,14 +39,21 @@ function createSunburstChart(data) {
     document.getElementById('visualizationContainer').appendChild(container);
 
     // Process the sunburst data
-    const { ids, labels, parents, values } = processSunburstData(data);
+    const processedData = processSunburstData(data);
+
+    if (!processedData) {
+        console.error("Invalid sunburst data structure");
+        container.textContent = "Invalid sunburst data structure.";
+        return;
+    }
 
     const trace = {
         type: "sunburst",
-        ids: ids,
-        labels: labels,
-        parents: parents,
-        values: values,
+        ids: processedData.ids,
+        labels: processedData.labels,
+        parents: processedData.parents,
+        values: processedData.values,
+        branchvalues: 'total',
         outsidetextfont: { size: 20, color: "#377eb8" },
         leaf: { opacity: 0.4 },
         marker: { line: { width: 2 } },
@@ -64,19 +71,29 @@ function createSunburstChart(data) {
 }
 
 function processSunburstData(data) {
+    if (!data || typeof data !== 'object') {
+        console.error("Invalid sunburst data");
+        return null;
+    }
+
     const ids = [];
     const labels = [];
     const parents = [];
     const values = [];
 
     function addNode(node, parentId = "") {
-        const id = node.name;
+        if (!node || typeof node !== 'object' || !node.name) {
+            console.warn("Invalid node data:", node);
+            return;
+        }
+
+        const id = parentId + '/' + node.name;
         ids.push(id);
         labels.push(node.name);
         parents.push(parentId);
-        values.push(node.value || 1);
+        values.push(node.value || 0);
 
-        if (node.children) {
+        if (node.children && Array.isArray(node.children)) {
             node.children.forEach(child => addNode(child, id));
         }
     }
