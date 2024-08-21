@@ -24,7 +24,9 @@ function createScatterPlot(data) {
         y: data.map(d => d.y),
         mode: 'markers',
         type: 'scatter',
-        marker: { color: data.map(d => d.topic), colorscale: 'Viridis' }
+        marker: { color: data.map(d => d.topic), colorscale: 'Viridis' },
+        text: data.map(d => `<b>Title:</b> ${d.title}<br><b>URL:</b> ${d.url}<br><b>Tags:</b> ${d.tags.join(', ')}<br><b>Topic:</b> ${d.topicName}`),
+        hoverinfo: 'text'
     };
 
     const layout = {
@@ -32,7 +34,8 @@ function createScatterPlot(data) {
         xaxis: { title: 'X' },
         yaxis: { title: 'Y' },
         autosize: true,
-        margin: { l: 40, r: 40, b: 40, t: 40, pad: 4 }
+        margin: { l: 40, r: 40, b: 40, t: 40, pad: 4 },
+        hovermode: 'closest'
     };
 
     const config = {
@@ -41,6 +44,14 @@ function createScatterPlot(data) {
     };
 
     Plotly.newPlot(container, [trace], layout, config);
+
+    container.on('plotly_click', function(data) {
+        if (data.points.length > 0) {
+            const point = data.points[0];
+            const pointData = trace.text[point.pointIndex];
+            alert(pointData);  // You can replace this with a more sophisticated display method
+        }
+    });
 }
 
 function createSunburstChart(data) {
