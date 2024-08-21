@@ -30,10 +30,17 @@ function createScatterPlot(data) {
     const layout = {
         title: 'Bookmark Topics Scatter Plot',
         xaxis: { title: 'X' },
-        yaxis: { title: 'Y' }
+        yaxis: { title: 'Y' },
+        autosize: true,
+        margin: { l: 40, r: 40, b: 40, t: 40, pad: 4 }
     };
 
-    Plotly.newPlot(container, [trace], layout);
+    const config = {
+        responsive: true,
+        displayModeBar: false
+    };
+
+    Plotly.newPlot(container, [trace], layout, config);
 }
 
 function createSunburstChart(data) {
@@ -43,7 +50,6 @@ function createSunburstChart(data) {
         return;
     }
 
-    // Process the sunburst data
     const processedData = processSunburstData(data);
 
     if (!processedData) {
@@ -59,20 +65,26 @@ function createSunburstChart(data) {
         parents: processedData.parents,
         values: processedData.values,
         branchvalues: 'total',
-        outsidetextfont: { size: 20, color: "#377eb8" },
+        outsidetextfont: { size: 14, color: "#377eb8" },
         leaf: { opacity: 0.4 },
         marker: { line: { width: 2 } },
     };
 
     const layout = {
-        margin: { l: 0, r: 0, b: 0, t: 50 },
+        margin: { l: 0, r: 0, b: 0, t: 40 },
         sunburstcolorway: ["#636efa","#ef553b","#00cc96","#ab63fa","#19d3f3",
                            "#e763fa","#fecb52","#ffa15a","#ff6692","#b6e880"],
         extendsunburstcolorway: true,
-        title: 'Topic Hierarchy'
+        title: 'Topic Hierarchy',
+        autosize: true
     };
 
-    Plotly.newPlot(container, [trace], layout);
+    const config = {
+        responsive: true,
+        displayModeBar: false
+    };
+
+    Plotly.newPlot(container, [trace], layout, config);
 }
 
 function processSunburstData(data) {
@@ -109,3 +121,8 @@ function processSunburstData(data) {
 }
 
 window.createVisualization = createVisualization;
+
+window.addEventListener('resize', function() {
+    Plotly.Plots.resize('scatterPlotContainer');
+    Plotly.Plots.resize('sunburstContainer');
+});

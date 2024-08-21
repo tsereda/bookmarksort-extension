@@ -3,57 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bookmark Organizer</title>
-    <script src="plotly-2.34.0.min.js"></script>
-    <script type="module" src="popup.js"></script>
-    <script src="visualization.js"></script>
+    <title>Bookmark Visualizer</title>
     <style>
-        body, html {
+        body {
+            font-family: Arial, sans-serif;
             margin: 0;
-            padding: 0;
-            height: 100%;
-            min-height: 400px;
-            min-width: 600px;
+            padding: 20px;
+            width: 800px;
+            height: 600px;
             overflow: hidden;
         }
         .header {
-            padding: 10px;
-            background-color: #f0f0f0;
-        }
-        #bookmarkCount {
-            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
         }
         .action-buttons {
             display: flex;
             gap: 10px;
         }
-        .action-buttons button {
-            padding: 5px 10px;
-        }
         .main-container {
             display: flex;
-            height: calc(100% - 100px); /* Adjusted for larger header */
-            overflow: hidden;
+            gap: 20px;
+            height: calc(100% - 80px); /* Adjust based on header height */
         }
         .visualization {
             flex: 1;
-            overflow: auto;
-            padding: 10px;
-            min-height: 200px;
+            height: 100%;
+            min-width: 0; /* Allows flex items to shrink below content size */
         }
         #statusMessage {
-            position: fixed;
-            bottom: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: #333;
-            color: white;
-            padding: 5px 10px;
-            border-radius: 5px;
-        }
-        #scatterPlotContainer {
-            width: 100%;
-            height: 400px;
+            margin-top: 20px;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -68,16 +50,14 @@
     </div>
 
     <div class="main-container">
-        <div id="scatterPlotContainer" class="visualization">
-            <!-- Scatter plot will be rendered here -->
-        </div>
-        <div id="sunburstContainer" class="visualization">
-            <!-- Sunburst diagram will be rendered here -->
-        </div>
+        <div id="scatterPlotContainer" class="visualization"></div>
+        <div id="sunburstContainer" class="visualization"></div>
     </div>
 
     <div id="statusMessage" aria-live="polite" style="display: none;"></div>
 
+    <script src="plotly-2.34.0.min.js"></script>
     <script src="popup.js" type="module"></script>
+    <script src="visualization.js"></script>
 </body>
 </html>
