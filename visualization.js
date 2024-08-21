@@ -3,7 +3,8 @@ function createVisualization(scatterPlotData, sunburstData) {
     
     if (!scatterPlotData || !sunburstData || typeof scatterPlotData !== 'object' || typeof sunburstData !== 'object') {
         console.error("Invalid visualization data received");
-        document.getElementById('visualizationContainer').textContent = "Invalid visualization data received.";
+        document.getElementById('scatterPlotContainer').textContent = "Invalid visualization data received.";
+        document.getElementById('sunburstContainer').textContent = "Invalid visualization data received.";
         return;
     }
 
@@ -12,9 +13,11 @@ function createVisualization(scatterPlotData, sunburstData) {
 }
 
 function createScatterPlot(data) {
-    const container = document.createElement('div');
-    container.id = 'scatterPlotContainer';
-    document.getElementById('visualizationContainer').appendChild(container);
+    const container = document.getElementById('scatterPlotContainer');
+    if (!container) {
+        console.error("Scatter plot container not found");
+        return;
+    }
 
     const trace = {
         x: data.map(d => d.x),
@@ -34,9 +37,11 @@ function createScatterPlot(data) {
 }
 
 function createSunburstChart(data) {
-    const container = document.createElement('div');
-    container.id = 'sunburstContainer';
-    document.getElementById('visualizationContainer').appendChild(container);
+    const container = document.getElementById('sunburstContainer');
+    if (!container) {
+        console.error("Sunburst container not found");
+        return;
+    }
 
     // Process the sunburst data
     const processedData = processSunburstData(data);

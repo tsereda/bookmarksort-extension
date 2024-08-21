@@ -12,7 +12,6 @@ function initializePopup() {
     const regenerateOrganizationBtn = document.getElementById('regenerateOrganization');
     const statusMessage = document.getElementById('statusMessage');
     const bookmarkCountValue = document.getElementById('bookmarkCountValue');
-    const visualizationContainer = document.getElementById('visualizationContainer');
 
     pullBookmarksBtn.addEventListener('click', pullBookmarks);
     refreshVisualizationBtn.addEventListener('click', refreshVisualization);
@@ -58,12 +57,13 @@ function initializePopup() {
 
     function updateVisualization(scatterPlotData, sunburstData) {
         console.log("Updating visualization with data:", { scatterPlotData, sunburstData });
-        visualizationContainer.innerHTML = '';
+        
         if (typeof window.createVisualization === 'function') {
             window.createVisualization(scatterPlotData, sunburstData);
         } else {
             console.error('createVisualization function is not available');
-            visualizationContainer.textContent = 'Visualization function not available';
+            document.getElementById('scatterPlotContainer').textContent = 'Scatter plot visualization not available';
+            document.getElementById('sunburstContainer').textContent = 'Sunburst visualization not available';
         }
     }
 
