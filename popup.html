@@ -8,35 +8,52 @@
     <script type="module" src="popup.js"></script>
     <script src="visualization.js"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
+        body, html {
             margin: 0;
-            padding: 20px;
-            width: 800px;
+            padding: 0;
+            height: 100%;
+            min-height: 400px;
+            min-width: 600px;
+            overflow: hidden;
         }
         .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+        }
+        #bookmarkCount {
+            margin-bottom: 10px;
         }
         .action-buttons {
             display: flex;
             gap: 10px;
         }
+        .action-buttons button {
+            padding: 5px 10px;
+        }
         .main-container {
             display: flex;
-            gap: 20px;
+            height: calc(100% - 100px); /* Adjusted for larger header */
+            overflow: hidden;
         }
         .visualization {
             flex: 1;
-            min-height: 400px;
-            border: 1px solid #ccc;
+            overflow: auto;
             padding: 10px;
+            min-height: 200px;
         }
         #statusMessage {
-            margin-top: 20px;
-            font-weight: bold;
+            position: fixed;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 5px;
+        }
+        #scatterPlotContainer {
+            width: 100%;
+            height: 400px;
         }
     </style>
 </head>
@@ -52,11 +69,9 @@
 
     <div class="main-container">
         <div id="scatterPlotContainer" class="visualization">
-            <h3>Scatter Plot</h3>
             <!-- Scatter plot will be rendered here -->
         </div>
         <div id="sunburstContainer" class="visualization">
-            <h3>Sunburst Diagram</h3>
             <!-- Sunburst diagram will be rendered here -->
         </div>
     </div>
