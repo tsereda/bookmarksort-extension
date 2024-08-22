@@ -115,7 +115,7 @@ function processSunburstData(data) {
             return;
         }
 
-        const id = parentId + '/' + node.name;
+        const id = parentId ? parentId + '/' + node.name : node.name;
         ids.push(id);
         labels.push(node.name);
         parents.push(parentId);

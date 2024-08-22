@@ -136,7 +136,7 @@ export async function updateTopics() {
 
 export async function getScatterPlotData() {
   try {
-    const response = await fetchWithRetry(`${API_BASE_URL}/visualization/scatter_plot`);
+    const response = await fetchWithRetry(`${API_BASE_URL}/visualizations/scatter_plot`);
     return await response.json();
   } catch (error) {
     console.error('Error fetching scatter plot data:', error);
@@ -146,7 +146,7 @@ export async function getScatterPlotData() {
 
 export async function getSunburstData() {
   try {
-    const response = await fetchWithRetry(`${API_BASE_URL}/visualization/sunburst`);
+    const response = await fetchWithRetry(`${API_BASE_URL}/visualizations/sunburst`);
     return await response.json();
   } catch (error) {
     console.error('Error fetching sunburst data:', error);
