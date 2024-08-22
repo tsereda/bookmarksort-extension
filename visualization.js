@@ -24,7 +24,7 @@ function createScatterPlot(data) {
         y: data.map(d => d.y),
         mode: 'markers',
         type: 'scatter',
-        marker: { color: data.map(d => d.topic), colorscale: 'Viridis' },
+        marker: { color: data.map(d => d.color) },
         text: data.map(d => `<b>Title:</b> ${d.title}<br><b>URL:</b> ${d.url}<br><b>Tags:</b> ${d.tags.join(', ')}<br><b>Topic:</b> ${d.topicName}`),
         hoverinfo: 'text'
     };
@@ -78,14 +78,11 @@ function createSunburstChart(data) {
         branchvalues: 'total',
         outsidetextfont: { size: 14, color: "#377eb8" },
         leaf: { opacity: 0.4 },
-        marker: { line: { width: 2 } },
+        marker: { colors: processedData.colors },
     };
 
     const layout = {
         margin: { l: 0, r: 0, b: 0, t: 40 },
-        sunburstcolorway: ["#636efa","#ef553b","#00cc96","#ab63fa","#19d3f3",
-                           "#e763fa","#fecb52","#ffa15a","#ff6692","#b6e880"],
-        extendsunburstcolorway: true,
         title: 'Topic Hierarchy',
         autosize: true
     };
@@ -108,6 +105,7 @@ function processSunburstData(data) {
     const labels = [];
     const parents = [];
     const values = [];
+    const colors = [];
 
     function addNode(node, parentId = "") {
         if (!node || typeof node !== 'object' || !node.name) {
@@ -120,6 +118,7 @@ function processSunburstData(data) {
         labels.push(node.name);
         parents.push(parentId);
         values.push(node.value || 0);
+        colors.push(node.color || '#CCCCCC');
 
         if (node.children && Array.isArray(node.children)) {
             node.children.forEach(child => addNode(child, id));
@@ -128,7 +127,7 @@ function processSunburstData(data) {
 
     addNode(data);
 
-    return { ids, labels, parents, values };
+    return { ids, labels, parents, values, colors };
 }
 
 window.createVisualization = createVisualization;
