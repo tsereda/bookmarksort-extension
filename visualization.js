@@ -1,7 +1,7 @@
 function createVisualization(scatterPlotData, sunburstData) {
     console.log("Received visualization data:", { scatterPlotData, sunburstData });
     
-    if (!scatterPlotData || !sunburstData || typeof scatterPlotData !== 'object' || typeof sunburstData !== 'object') {
+    if (!Array.isArray(scatterPlotData) || typeof sunburstData !== 'object') {
         console.error("Invalid visualization data received");
         document.getElementById('scatterPlotContainer').textContent = "Invalid visualization data received.";
         document.getElementById('sunburstContainer').textContent = "Invalid visualization data received.";
@@ -54,6 +54,39 @@ function createScatterPlot(data) {
     });
 }
 
+function processSunburstData(data) {
+    if (!data || typeof data !== 'object') {
+        console.error("Invalid sunburst data");
+        return null;
+    }
+
+    const ids = [];
+    const labels = [];
+    const parents = [];
+    const colors = [];
+
+    function addNode(node, parentId = "") {
+        if (!node || typeof node !== 'object' || !node.name) {
+            console.warn("Invalid node data:", node);
+            return;
+        }
+
+        const id = parentId ? `${parentId}/${node.name}` : node.name;
+        ids.push(id);
+        labels.push(node.name);
+        parents.push(parentId);
+        colors.push(node.color || '#CCCCCC');
+
+        if (node.children && Array.isArray(node.children)) {
+            node.children.forEach(child => addNode(child, id));
+        }
+    }
+
+    addNode(data);
+
+    return { ids, labels, parents, colors };
+}
+
 function createSunburstChart(data) {
     const container = document.getElementById('sunburstContainer');
     if (!container) {
@@ -74,8 +107,6 @@ function createSunburstChart(data) {
         ids: processedData.ids,
         labels: processedData.labels,
         parents: processedData.parents,
-        values: processedData.values,
-        branchvalues: 'total',
         outsidetextfont: { size: 14, color: "#377eb8" },
         leaf: { opacity: 0.4 },
         marker: { colors: processedData.colors },
@@ -93,41 +124,6 @@ function createSunburstChart(data) {
     };
 
     Plotly.newPlot(container, [trace], layout, config);
-}
-
-function processSunburstData(data) {
-    if (!data || typeof data !== 'object') {
-        console.error("Invalid sunburst data");
-        return null;
-    }
-
-    const ids = [];
-    const labels = [];
-    const parents = [];
-    const values = [];
-    const colors = [];
-
-    function addNode(node, parentId = "") {
-        if (!node || typeof node !== 'object' || !node.name) {
-            console.warn("Invalid node data:", node);
-            return;
-        }
-
-        const id = parentId ? parentId + '/' + node.name : node.name;
-        ids.push(id);
-        labels.push(node.name);
-        parents.push(parentId);
-        values.push(node.value || 0);
-        colors.push(node.color || '#CCCCCC');
-
-        if (node.children && Array.isArray(node.children)) {
-            node.children.forEach(child => addNode(child, id));
-        }
-    }
-
-    addNode(data);
-
-    return { ids, labels, parents, values, colors };
 }
 
 window.createVisualization = createVisualization;
