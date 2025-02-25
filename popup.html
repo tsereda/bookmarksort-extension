@@ -3,61 +3,508 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bookmark Visualizer</title>
+    <title>BERTopic Bookmark Manager</title>
     <style>
+        /* Base Styles */
+        :root {
+            --primary-color: #4a6da7;
+            --primary-light: #6e8cbc;
+            --primary-dark: #395682;
+            --secondary-color: #e9ecef;
+            --text-color: #343a40;
+            --border-color: #ced4da;
+            --danger-color: #dc3545;
+            --success-color: #28a745;
+            --warning-color: #ffc107;
+        }
+        
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
-            padding: 20px;
-            width: 760px;
+            padding: 0;
+            width: 780px;
             height: 600px;
             overflow: hidden;
+            color: var(--text-color);
+            background-color: #f8f9fa;
         }
+        
+        /* Header Styles */
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            padding: 12px 20px;
+            background-color: var(--primary-color);
+            color: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 1.4rem;
+            font-weight: 500;
+        }
+        
         .action-buttons {
             display: flex;
-            gap: 10px;
+            gap: 8px;
         }
-        .main-container {
+        
+        button {
+            cursor: pointer;
+            padding: 8px 12px;
+            border: none;
+            border-radius: 4px;
+            background-color: var(--primary-dark);
+            color: white;
+            font-size: 0.875rem;
+            transition: background-color 0.2s;
+        }
+        
+        button:hover {
+            background-color: var(--primary-light);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        button.secondary {
+            background-color: var(--secondary-color);
+            color: var(--text-color);
+        }
+        
+        button.secondary:hover {
+            background-color: #d1d7dd;
+        }
+        
+        button.danger {
+            background-color: var(--danger-color);
+        }
+        
+        button.danger:hover {
+            background-color: #bd2130;
+        }
+        
+        /* Tab Navigation */
+        .tab-navigation {
             display: flex;
-            gap: 20px;
-            height: calc(100% - 80px); /* Adjust based on header height */
+            background-color: var(--secondary-color);
+            border-bottom: 1px solid var(--border-color);
         }
+        
+        .tab-button {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            color: var(--text-color);
+            font-weight: 500;
+            cursor: pointer;
+            position: relative;
+            transition: background-color 0.2s;
+        }
+        
+        .tab-button:hover {
+            background-color: rgba(0, 0, 0, 0.05);
+        }
+        
+        .tab-button.active {
+            color: var(--primary-color);
+            background-color: white;
+        }
+        
+        .tab-button.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background-color: var(--primary-color);
+        }
+        
+        /* Tab Content */
+        .tab-content {
+            display: none;
+            height: calc(100% - 108px);
+            overflow: hidden;
+        }
+        
+        .tab-content.active {
+            display: flex;
+        }
+        
+        /* Visualization Tab */
+        .visualization-tab {
+            flex-direction: row;
+            gap: 20px;
+            padding: 20px;
+        }
+        
         .visualization {
             flex: 1;
             height: 100%;
-            min-width: 0; /* Allows flex items to shrink below content size */
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            overflow: hidden;
         }
-        #statusMessage {
+        
+        /* Bookmarks Tab */
+        .bookmarks-tab {
+            flex-direction: row;
+            height: 100%;
+        }
+        
+        .bookmarks-sidebar {
+            width: 300px;
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        
+        .search-container {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 0.875rem;
+        }
+        
+        .bookmark-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0;
+            margin: 0;
+            list-style: none;
+        }
+        
+        .bookmark-item {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .bookmark-item:hover {
+            background-color: var(--secondary-color);
+        }
+        
+        .bookmark-item.active {
+            background-color: rgba(74, 109, 167, 0.1);
+            border-left: 3px solid var(--primary-color);
+        }
+        
+        .bookmark-title {
+            font-weight: 500;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .bookmark-url {
+            font-size: 0.75rem;
+            color: #6c757d;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .bookmark-topic {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 2px 6px;
+            background-color: rgba(74, 109, 167, 0.1);
+            color: var(--primary-color);
+            border-radius: 12px;
+            font-size: 0.75rem;
+        }
+        
+        .bookmark-detail {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .detail-header {
+            margin-bottom: 16px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .detail-title {
+            font-size: 1.25rem;
+            font-weight: 500;
+            margin: 0 0 8px 0;
+            word-break: break-word;
+        }
+        
+        .detail-url {
+            font-size: 0.875rem;
+            color: #6c757d;
+            word-break: break-all;
+        }
+        
+        .detail-topic {
+            margin-top: 12px;
+            display: inline-block;
+            padding: 4px 8px;
+            background-color: rgba(74, 109, 167, 0.1);
+            color: var(--primary-color);
+            border-radius: 16px;
+            font-size: 0.875rem;
+        }
+        
+        .detail-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+        
+        .detail-content {
+            flex: 1;
+        }
+        
+        .tag-section {
             margin-top: 20px;
+        }
+        
+        .tag-section h3 {
+            font-size: 1rem;
+            margin-bottom: 8px;
+        }
+        
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        
+        .tag {
+            padding: 4px 10px;
+            background-color: var(--secondary-color);
+            border-radius: 16px;
+            font-size: 0.875rem;
+        }
+        
+        .no-bookmark-selected {
+            display: flex;
+            height: 100%;
+            align-items: center;
+            justify-content: center;
+            color: #6c757d;
+            font-size: 1.1rem;
+        }
+        
+        /* Form Styles */
+        .bookmark-form {
+            display: none;
+            padding: 20px;
+            flex-direction: column;
+            gap: 16px;
+        }
+        
+        .bookmark-form.active {
+            display: flex;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        
+        .form-group label {
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+        
+        .form-group input, .form-group textarea {
+            padding: 8px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 0.875rem;
+            font-family: inherit;
+        }
+        
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        
+        /* Status Message */
+        #statusMessage {
+            padding: 10px 20px;
+            margin: 0;
             font-weight: bold;
+            display: none;
+            background-color: rgba(40, 167, 69, 0.1);
+            color: var(--success-color);
+            text-align: center;
+        }
+        
+        #statusMessage.error {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--danger-color);
+        }
+        
+        #statusMessage.warning {
+            background-color: rgba(255, 193, 7, 0.1);
+            color: var(--warning-color);
+        }
+        
+        #statusMessage.active {
+            display: block;
+        }
+        
+        /* Empty States */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            text-align: center;
+            color: #6c757d;
+            height: 100%;
+        }
+        
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+        
+        .empty-state-message {
+            font-size: 1.1rem;
+            margin-bottom: 16px;
+        }
+        
+        .empty-state-action {
+            margin-top: 16px;
+        }
+        
+        /* Loading States */
+        .loading-spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            border-radius: 50%;
+            border-top: 4px solid var(--primary-color);
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            gap: 16px;
+            color: #6c757d;
         }
     </style>
 </head>
 <body>
+    <!-- Header -->
     <div class="header">
-        <div id="bookmarkCount">Bookmarks: <span id="bookmarkCountValue">0</span></div>
+        <h1>BERTopic Bookmark Manager</h1>
         <div class="action-buttons">
-            <button id="pullBookmarks">Pull Bookmarks</button>
-            <button id="refreshVisualization">Refresh Visualization</button>
-            <button id="regenerateOrganization">Regenerate Organization</button>
+            <button id="addBookmarkButton">Add Bookmark</button>
+            <button id="pullBookmarksButton">Pull Bookmarks</button>
+            <button id="refreshButton" class="secondary">Refresh</button>
         </div>
     </div>
-
-    <div class="main-container">
+    
+    <!-- Tab Navigation -->
+    <div class="tab-navigation">
+        <button class="tab-button active" data-tab="bookmarks">Bookmarks</button>
+        <button class="tab-button" data-tab="visualizations">Visualizations</button>
+    </div>
+    
+    <!-- Status Message -->
+    <div id="statusMessage" aria-live="polite"></div>
+    
+    <!-- Tab Content -->
+    <div class="tab-content bookmarks-tab active" id="bookmarksTab">
+        <!-- Bookmark List Sidebar -->
+        <div class="bookmarks-sidebar">
+            <div class="search-container">
+                <input type="text" class="search-input" placeholder="Search bookmarks..." id="searchBookmarks">
+            </div>
+            <ul class="bookmark-list" id="bookmarkList">
+                <!-- Bookmark items will be populated here -->
+                <div class="loading-state">
+                    <div class="loading-spinner"></div>
+                    <div>Loading bookmarks...</div>
+                </div>
+            </ul>
+        </div>
+        
+        <!-- Bookmark Detail View -->
+        <div class="bookmark-detail" id="bookmarkDetail">
+            <div class="no-bookmark-selected">
+                Select a bookmark to view details
+            </div>
+        </div>
+        
+        <!-- Bookmark Form (hidden by default) -->
+        <div class="bookmark-form" id="bookmarkForm">
+            <h2 id="formTitle">Add New Bookmark</h2>
+            <div class="form-group">
+                <label for="bookmarkTitle">Title</label>
+                <input type="text" id="bookmarkTitle" required>
+            </div>
+            <div class="form-group">
+                <label for="bookmarkUrl">URL</label>
+                <input type="url" id="bookmarkUrl" required>
+            </div>
+            <div class="form-group">
+                <label for="bookmarkTags">Tags (comma separated)</label>
+                <input type="text" id="bookmarkTags" placeholder="e.g. work, reference, important">
+            </div>
+            <div class="form-group">
+                <label for="bookmarkNotes">Notes</label>
+                <textarea id="bookmarkNotes" placeholder="Add any additional notes..."></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="button" id="cancelFormButton" class="secondary">Cancel</button>
+                <button type="button" id="saveBookmarkButton">Save Bookmark</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Visualizations Tab -->
+    <div class="tab-content visualization-tab" id="visualizationsTab">
         <div id="scatterPlotContainer" class="visualization"></div>
         <div id="sunburstContainer" class="visualization"></div>
     </div>
-
-    <div id="statusMessage" aria-live="polite" style="display: none;"></div>
-
+    
+    <!-- Scripts -->
     <script src="plotly-2.34.0.min.js"></script>
-    <script src="popup.js" type="module"></script>
     <script src="visualization.js"></script>
+    <script src="popup.js" type="module"></script>
 </body>
 </html>
