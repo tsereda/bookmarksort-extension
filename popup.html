@@ -178,12 +178,114 @@
             font-size: 0.875rem;
         }
         
-        .bookmark-list {
+        /* Breadcrumb Navigation */
+        .breadcrumb-nav {
+            display: flex;
+            align-items: center;
+            padding: 8px 16px;
+            background-color: var(--secondary-color);
+            border-bottom: 1px solid var(--border-color);
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+        
+        .breadcrumb-item {
+            background: none;
+            border: none;
+            padding: 6px 8px;
+            font-size: 0.8rem;
+            color: var(--primary-color);
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        
+        .breadcrumb-item:hover {
+            background-color: rgba(74, 109, 167, 0.1);
+        }
+        
+        .breadcrumb-item.active {
+            font-weight: 500;
+            background-color: rgba(74, 109, 167, 0.15);
+        }
+        
+        .breadcrumb-item:not(:last-child)::after {
+            content: '›';
+            margin-left: 8px;
+            color: var(--border-color);
+        }
+        
+        /* Hierarchy Container */
+        .hierarchy-container {
             flex: 1;
             overflow-y: auto;
+            position: relative;
+        }
+        
+        /* Topic Hierarchy */
+        .topic-hierarchy {
+            display: none;
+            flex-direction: column;
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .topic-hierarchy.active {
+            display: flex;
+        }
+        
+        .topic-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .topic-item:hover {
+            background-color: var(--secondary-color);
+        }
+        
+        .topic-icon {
+            margin-right: 12px;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--primary-color);
+        }
+        
+        .topic-name {
+            flex: 1;
+            font-weight: 500;
+        }
+        
+        .topic-count {
+            background-color: rgba(74, 109, 167, 0.1);
+            color: var(--primary-color);
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+        }
+        
+        .topic-chevron {
+            margin-left: 10px;
+            color: var(--border-color);
+        }
+        
+        /* Bookmark List */
+        .bookmark-list {
+            display: none;
+            flex-direction: column;
             padding: 0;
             margin: 0;
             list-style: none;
+        }
+        
+        .bookmark-list.active {
+            display: flex;
         }
         
         .bookmark-item {
@@ -226,6 +328,24 @@
             color: var(--primary-color);
             border-radius: 12px;
             font-size: 0.75rem;
+        }
+        
+        /* Back Button for Bookmark List */
+        .back-button {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            background-color: var(--secondary-color);
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+        }
+        
+        .back-button-icon {
+            margin-right: 8px;
+        }
+        
+        .back-button-text {
+            font-weight: 500;
         }
         
         .bookmark-detail {
@@ -455,13 +575,26 @@
             <div class="search-container">
                 <input type="text" class="search-input" placeholder="Search bookmarks..." id="searchBookmarks">
             </div>
-            <ul class="bookmark-list" id="bookmarkList">
-                <!-- Bookmark items will be populated here -->
-                <div class="loading-state">
-                    <div class="loading-spinner"></div>
-                    <div>Loading bookmarks...</div>
+            
+            <!-- Breadcrumb navigation -->
+            <div class="breadcrumb-nav">
+                <button class="breadcrumb-item active">All Topics</button>
+                <div id="activeBreadcrumbs"></div>
+            </div>
+            
+            <!-- Hierarchy navigation -->
+            <div class="hierarchy-container">
+                <div id="topicHierarchy" class="topic-hierarchy active">
+                    <!-- Topics will be populated here -->
+                    <div class="loading-state">
+                        <div class="loading-spinner"></div>
+                        <div>Loading topics...</div>
+                    </div>
                 </div>
-            </ul>
+                <div id="bookmarkList" class="bookmark-list">
+                    <!-- Bookmarks will be populated here -->
+                </div>
+            </div>
         </div>
         
         <!-- Bookmark Detail View -->

@@ -5,6 +5,7 @@ import {
     getScatterPlotData,
     getSunburstData,
     getBookmarks,
+    getBookmarksByTopic,
     addBookmark,
     updateBookmark,
     deleteBookmark
@@ -16,10 +17,19 @@ let selectedBookmarkId = null;
 let isFormActive = false;
 let isEditMode = false;
 
+// Navigation state
+let navigationState = {
+    currentView: 'topics', // 'topics' or 'bookmarks'
+    currentPath: [],       // Path of topics from root
+    currentTopicId: null,  // Current topic ID
+    topicHierarchy: null,  // Cached topic hierarchy
+};
+
 // DOM Elements
 const tabButtons = document.querySelectorAll('.tab-button');
 const tabContents = document.querySelectorAll('.tab-content');
 const bookmarkList = document.getElementById('bookmarkList');
+const topicHierarchy = document.getElementById('topicHierarchy');
 const bookmarkDetail = document.getElementById('bookmarkDetail');
 const bookmarkForm = document.getElementById('bookmarkForm');
 const statusMessage = document.getElementById('statusMessage');
@@ -44,6 +54,9 @@ function initializePopup() {
     setupTabNavigation();
     setupActionButtons();
     setupSearchFunctionality();
+    
+    // Initialize hierarchy navigation
+    initHierarchyNavigation();
     
     // Load initial data
     loadBookmarks();
@@ -85,6 +98,7 @@ function setupActionButtons() {
     refreshButton.addEventListener('click', () => {
         loadBookmarks();
         refreshVisualization();
+        initHierarchyNavigation();
     });
     
     // Cancel Form Button
@@ -112,6 +126,7 @@ async function generateTopics() {
         // Refresh data to show the new topics
         await loadBookmarks();
         await refreshVisualization();
+        await initHierarchyNavigation();
     } catch (error) {
         console.error("Error generating topics:", error);
         showStatus(`Failed to generate topics: ${error.message}`, 'error');
@@ -122,31 +137,153 @@ async function generateTopics() {
 function setupSearchFunctionality() {
     searchInput.addEventListener('input', (e) => {
         const searchTerm = e.target.value.toLowerCase();
-        filterBookmarks(searchTerm);
+        filterItems(searchTerm);
     });
 }
 
-// Filter bookmarks based on search term
-function filterBookmarks(searchTerm) {
-    const bookmarkItems = bookmarkList.querySelectorAll('.bookmark-item');
-    
-    bookmarkItems.forEach(item => {
-        const title = item.querySelector('.bookmark-title').textContent.toLowerCase();
-        const url = item.querySelector('.bookmark-url').textContent.toLowerCase();
-        const topic = item.querySelector('.bookmark-topic')?.textContent.toLowerCase() || '';
+// Filter items based on search term
+function filterItems(searchTerm) {
+    if (navigationState.currentView === 'topics') {
+        // Filter topics
+        const topicItems = topicHierarchy.querySelectorAll('.topic-item');
         
-        if (title.includes(searchTerm) || url.includes(searchTerm) || topic.includes(searchTerm)) {
-            item.style.display = 'block';
-        } else {
-            item.style.display = 'none';
-        }
-    });
+        topicItems.forEach(item => {
+            const name = item.querySelector('.topic-name').textContent.toLowerCase();
+            
+            if (name.includes(searchTerm)) {
+                item.style.display = 'flex';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    } else {
+        // Filter bookmarks
+        const bookmarkItems = bookmarkList.querySelectorAll('.bookmark-item');
+        
+        bookmarkItems.forEach(item => {
+            const title = item.querySelector('.bookmark-title').textContent.toLowerCase();
+            const url = item.querySelector('.bookmark-url').textContent.toLowerCase();
+            const topic = item.querySelector('.bookmark-topic')?.textContent.toLowerCase() || '';
+            
+            if (title.includes(searchTerm) || url.includes(searchTerm) || topic.includes(searchTerm)) {
+                item.style.display = 'block';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
 }
 
-// Load bookmarks from the API
-async function loadBookmarks() {
+// Initialize hierarchy navigation
+async function initHierarchyNavigation() {
     try {
-        showStatus('Loading bookmarks...', 'normal');
+        showStatus('Loading topic hierarchy...', 'normal');
+        
+        // Show loading state
+        topicHierarchy.innerHTML = `
+            <div class="loading-state">
+                <div class="loading-spinner"></div>
+                <div>Loading topics...</div>
+            </div>
+        `;
+        
+        // Get the topic hierarchy
+        const topicTree = await getTopicTree();
+        navigationState.topicHierarchy = topicTree;
+        
+        // Set up breadcrumb root event listener
+        document.querySelector('.breadcrumb-item').addEventListener('click', () => navigateToRoot());
+        
+        // Render the root topics
+        renderTopics(topicTree.children || []);
+        
+        clearStatus();
+    } catch (error) {
+        console.error("Error initializing hierarchy navigation:", error);
+        showStatus(`Failed to load topic hierarchy: ${error.message}`, "error");
+        
+        topicHierarchy.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">❌</div>
+                <div class="empty-state-message">Error loading topics</div>
+                <div>${error.message}</div>
+                <button class="empty-state-action" id="retryTopicsButton">Retry</button>
+            </div>
+        `;
+        document.getElementById('retryTopicsButton').addEventListener('click', initHierarchyNavigation);
+    }
+}
+
+// Render topics at the current level
+function renderTopics(topics) {
+    // Show topics, hide bookmarks
+    topicHierarchy.classList.add('active');
+    bookmarkList.classList.remove('active');
+    navigationState.currentView = 'topics';
+    
+    // Clear existing topics
+    topicHierarchy.innerHTML = '';
+    
+    if (!topics || topics.length === 0) {
+        topicHierarchy.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">📁</div>
+                <div class="empty-state-message">No topics found</div>
+                <div>Create topics to organize your bookmarks</div>
+                <button class="empty-state-action" id="emptyStateCreateTopics">Create Topics</button>
+            </div>
+        `;
+        document.getElementById('emptyStateCreateTopics').addEventListener('click', generateTopics);
+        return;
+    }
+    
+    // Add each topic
+    topics.forEach(topic => {
+        const topicItem = document.createElement('div');
+        topicItem.className = 'topic-item';
+        topicItem.setAttribute('data-topic-id', topic.id);
+        
+        const hasChildren = topic.children && topic.children.length > 0;
+        const bookmarkCount = calculateTopicBookmarkCount(topic);
+        
+        topicItem.innerHTML = `
+            <div class="topic-icon">
+                <i class="folder-icon">📁</i>
+            </div>
+            <div class="topic-name">${escapeHTML(topic.name)}</div>
+            <div class="topic-count">${bookmarkCount}</div>
+            ${hasChildren ? '<div class="topic-chevron">›</div>' : ''}
+        `;
+        
+        topicItem.addEventListener('click', () => {
+            if (hasChildren) {
+                navigateToTopic(topic);
+            } else {
+                showBookmarksForTopic(topic);
+            }
+        });
+        
+        topicHierarchy.appendChild(topicItem);
+    });
+    
+    // Update breadcrumbs
+    updateBreadcrumbs();
+}
+
+// Show bookmarks for a specific topic
+async function showBookmarksForTopic(topic) {
+    try {
+        // Update navigation state
+        navigationState.currentView = 'bookmarks';
+        navigationState.currentTopicId = topic.id;
+        
+        // Add this topic to the path if not already there
+        if (!navigationState.currentPath.find(p => p.id === topic.id)) {
+            navigationState.currentPath.push(topic);
+        }
+        
+        // Update breadcrumbs
+        updateBreadcrumbs();
         
         // Show loading state
         bookmarkList.innerHTML = `
@@ -156,71 +293,179 @@ async function loadBookmarks() {
             </div>
         `;
         
-        // Fetch bookmarks
-        const bookmarks = await getBookmarks();
-        currentBookmarks = bookmarks;
+        // Get bookmarks for this topic
+        const bookmarks = await getBookmarksByTopic(topic.id);
         
+        // Hide topics, show bookmarks
+        topicHierarchy.classList.remove('active');
+        bookmarkList.classList.add('active');
+        
+        // Clear existing bookmarks
+        bookmarkList.innerHTML = '';
+        
+        // Add back button
+        const backButton = document.createElement('div');
+        backButton.className = 'back-button';
+        backButton.innerHTML = `
+            <div class="back-button-icon">←</div>
+            <div class="back-button-text">Back to Topics</div>
+        `;
+        backButton.addEventListener('click', () => {
+            // Go back to topics view
+            navigationState.currentView = 'topics';
+            renderTopics(findCurrentTopicParent().children || []);
+        });
+        bookmarkList.appendChild(backButton);
+        
+        // Add bookmarks
         if (bookmarks.length === 0) {
-            bookmarkList.innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon">📚</div>
-                    <div class="empty-state-message">No bookmarks found</div>
-                    <div>Add some bookmarks or pull them from your browser</div>
-                    <button class="empty-state-action" id="emptyStatePullButton">Pull Bookmarks</button>
-                </div>
+            const emptyState = document.createElement('div');
+            emptyState.className = 'empty-state';
+            emptyState.innerHTML = `
+                <div class="empty-state-icon">🔖</div>
+                <div class="empty-state-message">No bookmarks in this topic</div>
+                <div>Add bookmarks to this topic</div>
             `;
-            document.getElementById('emptyStatePullButton').addEventListener('click', pullBookmarks);
-            clearStatus();
-            return;
+            bookmarkList.appendChild(emptyState);
+        } else {
+            currentBookmarks = bookmarks;
+            
+            bookmarks.forEach(bookmark => {
+                const bookmarkItem = document.createElement('li');
+                bookmarkItem.className = 'bookmark-item';
+                bookmarkItem.setAttribute('data-id', bookmark.id);
+                
+                const topicName = bookmark.topicName || topic.name;
+                const topicColor = bookmark.color || topic.color || '#4a6da7';
+                
+                bookmarkItem.innerHTML = `
+                    <div class="bookmark-title">${escapeHTML(bookmark.title)}</div>
+                    <div class="bookmark-url">${escapeHTML(bookmark.url)}</div>
+                    <div class="bookmark-topic" style="background-color: ${topicColor}20; color: ${topicColor}">${escapeHTML(topicName)}</div>
+                `;
+                
+                bookmarkItem.addEventListener('click', () => {
+                    selectBookmark(bookmark.id);
+                });
+                
+                bookmarkList.appendChild(bookmarkItem);
+            });
         }
-        
-        // Render bookmarks
-        renderBookmarkList(bookmarks);
-        clearStatus();
     } catch (error) {
-        console.error("Error loading bookmarks:", error);
-        showStatus(`Failed to load bookmarks: ${error.message}`, 'error');
+        console.error("Error showing bookmarks for topic:", error);
+        showStatus(`Failed to load bookmarks for topic: ${error.message}`, "error");
         
         bookmarkList.innerHTML = `
+            <div class="back-button">
+                <div class="back-button-icon">←</div>
+                <div class="back-button-text">Back to Topics</div>
+            </div>
             <div class="empty-state">
                 <div class="empty-state-icon">❌</div>
                 <div class="empty-state-message">Error loading bookmarks</div>
                 <div>${error.message}</div>
-                <button class="empty-state-action" id="emptyStateRetryButton">Retry</button>
+                <button class="empty-state-action" id="retryBookmarksButton">Retry</button>
             </div>
         `;
-        document.getElementById('emptyStateRetryButton').addEventListener('click', loadBookmarks);
+        document.querySelector('.back-button').addEventListener('click', () => {
+            navigationState.currentView = 'topics';
+            renderTopics(findCurrentTopicParent().children || []);
+        });
+        document.getElementById('retryBookmarksButton').addEventListener('click', () => showBookmarksForTopic(topic));
     }
 }
 
-// Render the bookmark list
-function renderBookmarkList(bookmarks) {
-    bookmarkList.innerHTML = '';
+// Navigate to a topic
+function navigateToTopic(topic) {
+    // Update navigation state
+    navigationState.currentPath.push(topic);
+    navigationState.currentTopicId = topic.id;
     
-    bookmarks.forEach(bookmark => {
-        const bookmarkItem = document.createElement('li');
-        bookmarkItem.className = 'bookmark-item';
-        bookmarkItem.setAttribute('data-id', bookmark.id);
+    // Render the topic's children
+    renderTopics(topic.children || []);
+}
+
+// Navigate to the root level
+function navigateToRoot() {
+    // Reset navigation state
+    navigationState.currentPath = [];
+    navigationState.currentTopicId = null;
+    
+    // Render the root topics
+    renderTopics(navigationState.topicHierarchy.children || []);
+}
+
+// Update breadcrumb navigation
+function updateBreadcrumbs() {
+    const breadcrumbsEl = document.getElementById('activeBreadcrumbs');
+    breadcrumbsEl.innerHTML = '';
+    
+    navigationState.currentPath.forEach((topic, index) => {
+        const breadcrumb = document.createElement('button');
+        breadcrumb.className = 'breadcrumb-item';
+        if (index === navigationState.currentPath.length - 1) {
+            breadcrumb.classList.add('active');
+        }
+        breadcrumb.textContent = topic.name;
         
-        const topicName = bookmark.topicName || `Topic ${bookmark.topic}`;
-        const topicColor = bookmark.color || '#4a6da7';
-        
-        bookmarkItem.innerHTML = `
-            <div class="bookmark-title">${escapeHTML(bookmark.title)}</div>
-            <div class="bookmark-url">${escapeHTML(bookmark.url)}</div>
-            <div class="bookmark-topic" style="background-color: ${topicColor}20; color: ${topicColor}">${escapeHTML(topicName)}</div>
-        `;
-        
-        bookmarkItem.addEventListener('click', () => {
-            selectBookmark(bookmark.id);
+        breadcrumb.addEventListener('click', () => {
+            // Navigate to this topic level
+            navigationState.currentPath = navigationState.currentPath.slice(0, index + 1);
+            navigationState.currentTopicId = topic.id;
+            
+            if (navigationState.currentView === 'bookmarks') {
+                showBookmarksForTopic(topic);
+            } else {
+                if (index === 0) {
+                    renderTopics(navigationState.topicHierarchy.children || []);
+                } else {
+                    const parent = navigationState.currentPath[index - 1];
+                    renderTopics(parent.children || []);
+                }
+            }
         });
         
-        bookmarkList.appendChild(bookmarkItem);
+        breadcrumbsEl.appendChild(breadcrumb);
     });
+}
+
+// Find the parent of the current topic
+function findCurrentTopicParent() {
+    if (navigationState.currentPath.length <= 1) {
+        return navigationState.topicHierarchy;
+    }
     
-    // If a bookmark was previously selected, try to reselect it
-    if (selectedBookmarkId) {
-        selectBookmark(selectedBookmarkId);
+    return navigationState.currentPath[navigationState.currentPath.length - 2];
+}
+
+// Calculate total bookmark count for a topic (including children)
+function calculateTopicBookmarkCount(topic) {
+    let count = topic.bookmarkCount || 0;
+    
+    if (topic.children && topic.children.length > 0) {
+        topic.children.forEach(child => {
+            count += calculateTopicBookmarkCount(child);
+        });
+    }
+    
+    return count;
+}
+
+// Load bookmarks from the API
+async function loadBookmarks() {
+    try {
+        showStatus('Loading bookmarks...', 'normal');
+        
+        // Fetch bookmarks
+        const bookmarks = await getBookmarks();
+        currentBookmarks = bookmarks;
+        
+        clearStatus();
+        return bookmarks;
+    } catch (error) {
+        console.error("Error loading bookmarks:", error);
+        showStatus(`Failed to load bookmarks: ${error.message}`, 'error');
+        return [];
     }
 }
 
@@ -283,6 +528,12 @@ function renderBookmarkDetails(bookmark) {
                     <div class="tag-list">
                         ${bookmark.tags.map(tag => `<div class="tag">${escapeHTML(tag)}</div>`).join('')}
                     </div>
+                </div>
+            ` : ''}
+            ${bookmark.notes ? `
+                <div class="notes-section">
+                    <h3>Notes</h3>
+                    <div class="notes-content">${escapeHTML(bookmark.notes)}</div>
                 </div>
             ` : ''}
         </div>
@@ -361,8 +612,14 @@ async function saveBookmark() {
         const bookmarkData = {
             title: bookmarkTitleInput.value.trim(),
             url: bookmarkUrlInput.value.trim(),
-            tags: bookmarkTagsInput.value ? bookmarkTagsInput.value.split(',').map(tag => tag.trim()) : []
+            tags: bookmarkTagsInput.value ? bookmarkTagsInput.value.split(',').map(tag => tag.trim()) : [],
+            notes: bookmarkNotesInput.value.trim()
         };
+        
+        // Add current topic if viewing a topic
+        if (navigationState.currentTopicId) {
+            bookmarkData.topic = navigationState.currentTopicId;
+        }
         
         if (isEditMode) {
             // Update existing bookmark
@@ -379,9 +636,17 @@ async function saveBookmark() {
             showStatus('Bookmark added successfully', 'success');
         }
         
-        // Hide form and refresh bookmarks
+        // Hide form and refresh
         hideBookmarkForm();
-        await loadBookmarks();
+        
+        // If we're in a topic, refresh that topic's bookmarks
+        if (navigationState.currentView === 'bookmarks' && navigationState.currentTopicId) {
+            const currentTopic = navigationState.currentPath[navigationState.currentPath.length - 1];
+            await showBookmarksForTopic(currentTopic);
+        } else {
+            // Otherwise, refresh all bookmarks
+            await loadBookmarks();
+        }
     } catch (error) {
         console.error("Error saving bookmark:", error);
         showStatus(`Failed to save bookmark: ${error.message}`, 'error');
@@ -404,9 +669,20 @@ async function deleteBookmarkById(bookmarkId) {
         
         showStatus('Bookmark deleted successfully', 'success');
         
-        // Reset selection and refresh bookmarks
+        // Reset selection
         selectedBookmarkId = null;
-        await loadBookmarks();
+        
+        // If we're in a topic, refresh that topic's bookmarks
+        if (navigationState.currentView === 'bookmarks' && navigationState.currentTopicId) {
+            const currentTopic = navigationState.currentPath[navigationState.currentPath.length - 1];
+            await showBookmarksForTopic(currentTopic);
+        } else {
+            // Otherwise, refresh all bookmarks
+            await loadBookmarks();
+        }
+        
+        // Show "no bookmark selected" in detail view
+        renderBookmarkDetails(null);
     } catch (error) {
         console.error("Error deleting bookmark:", error);
         showStatus(`Failed to delete bookmark: ${error.message}`, 'error');
@@ -434,6 +710,7 @@ async function pullBookmarks() {
         // Refresh data
         await loadBookmarks();
         await refreshVisualization();
+        await initHierarchyNavigation();
     } catch (error) {
         console.error("Error pulling bookmarks:", error);
         showStatus(`Failed to pull bookmarks: ${error.message}`, 'error');
