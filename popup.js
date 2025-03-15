@@ -77,6 +77,10 @@ function setupActionButtons() {
     // Pull Bookmarks Button
     pullBookmarksButton.addEventListener('click', pullBookmarks);
     
+    // Generate Topics Button
+    const generateTopicsButton = document.getElementById('createTopicsButton');
+    generateTopicsButton.addEventListener('click', generateTopics);
+    
     // Refresh Button
     refreshButton.addEventListener('click', () => {
         loadBookmarks();
@@ -90,6 +94,28 @@ function setupActionButtons() {
     
     // Save Bookmark Button
     saveBookmarkButton.addEventListener('click', saveBookmark);
+}
+
+// Generate topics for bookmarks
+async function generateTopics() {
+    try {
+        showStatus('Generating topics for bookmarks...', 'normal');
+        
+        const result = await updateTopics();
+        
+        if (result && result.message) {
+            showStatus(result.message, 'success');
+        } else {
+            showStatus('Topics generated successfully!', 'success');
+        }
+        
+        // Refresh data to show the new topics
+        await loadBookmarks();
+        await refreshVisualization();
+    } catch (error) {
+        console.error("Error generating topics:", error);
+        showStatus(`Failed to generate topics: ${error.message}`, 'error');
+    }
 }
 
 // Search Functionality
